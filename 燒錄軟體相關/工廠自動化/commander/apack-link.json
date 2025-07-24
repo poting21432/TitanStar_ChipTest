@@ -1,0 +1,11 @@
+{
+  "version":"2",
+  "id": "simplicityCommanderToolset",
+  "label": "Simplicity Commander Toolset",
+  "description": "Simplicity Commander Tools Collection",
+  "link": [
+    "commander_apack.json",
+    "silink_apack.json",
+    "edge_apack.json"
+  ]
+}

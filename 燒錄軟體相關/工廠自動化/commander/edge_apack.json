@@ -1,0 +1,69 @@
+{
+  "id": "edge",
+  "app_version": "0.0.5",
+  "label": "EDGE adapter pack",
+  "description": "EDGE is the capturing entity that connects to the adapters and streams data.",
+  "path": [
+    ".",
+    "../MacOS"
+  ],
+  "requiredFeatureLevel": "",
+  "featureLevel": 1,
+  "executable": {
+    "edge:linux.x86": {
+      "exe": "edge",
+      "optional": true
+    },
+    "edge:linux.x86_64": {
+      "exe": "edge",
+      "optional": true
+    },
+    "edge:win32.x86": {
+      "exe": "edge.exe",
+      "optional": true
+    },
+    "edge:win32.x86_64": {
+      "exe": "edge.exe",
+      "optional": true
+    },
+    "edge:macosx.x86_64": {
+      "exe": "edge",
+      "optional": true
+    }
+  },
+  "function": {
+    "version": {
+      "cmd": "$(edge) -v"
+    },
+    "quit": {
+      "cmd": "$(edge) quit --json"
+    },
+    "create": {
+      "cmd": "$(edge) create --group ${groupId} --json"
+    },
+    "end": {
+      "cmd": "$(edge) end --group ${groupId} --json"
+    },
+    "list": {
+      "cmd": "$(edge) list --json"
+    },
+    "listGroup": {
+      "cmd": "$(edge) list --group ${groupId} --json"
+    },
+    "connect": {
+      "cmd": "$(edge) connect --group ${groupId} --ip ${ip} --port ${port} --name ${name} --json"
+    },
+    "disconnect": {
+      "cmd": "$(edge) disconnect --group ${groupId} ( --index ${deviceId} | --name ${name} ) --json"
+    },
+    "start": {
+      "cmd": "$(edge) start --group ${groupId} --output ${filename} [ --index ${deviceId} | --name ${name} ] --json"
+    },
+    "stop": {
+      "cmd": "$(edge) stop --group ${groupId} [ --index ${deviceId} | --name ${name} ] --json"
+    },
+    "config": {
+      "cmd": "$(edge) config --url ${url} --json"
+    }
+  }
+}

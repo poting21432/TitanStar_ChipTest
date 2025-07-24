@@ -1,0 +1,23 @@
+﻿<UserControl x:Class="Support.Wpf.Compact.UserControl_SuggestString"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Support.Wpf.Compact" 
+             mc:Ignorable="d" x:Name="UC_SuggestString"
+             d:DataContext="{d:DesignInstance local:ModelTrie}">
+    <UserControl.Resources>
+        <Style TargetType="TextBox" BasedOn="{StaticResource StyleTextBox}"/>
+    </UserControl.Resources>
+    <StackPanel>
+        <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="{Binding ActualWidth, ElementName=UC_SuggestString}"/>
+
+        <Popup IsOpen="{Binding VisiblilitySuggest, Mode=TwoWay}"
+               VerticalOffset="40"
+               PlacementTarget="{Binding ElementName=UC_SuggestString}">
+            <ListBox ItemsSource="{Binding Suggestions}" 
+                     Width="{Binding ActualWidth, ElementName=UC_SuggestString}" Height="150"
+                     SelectedItem="{Binding SelectedText}" />
+        </Popup>
+    </StackPanel>
+</UserControl>

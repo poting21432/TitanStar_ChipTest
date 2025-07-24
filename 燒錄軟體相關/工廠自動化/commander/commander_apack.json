@@ -1,0 +1,142 @@
+{
+  "id": "simplicityCommander",
+  "label": "Simplicity Commander",
+  "description": "Simplicity Commander",
+  "app_version": "1.17.3",
+  "path": [
+    ".",
+    "../MacOS",
+    "../Frameworks"
+  ],
+  "featureLevel": 4,
+  "requiredFeatureLevel": "apack.core:4",
+  "hwdb.boardid": "method.getPartNumber + method.getVariant",
+  "hwdb.boardrev": "method.getRevision",
+  "hwdb.partid": "id",
+  "apack.adapterLabel": "adapterLabel + \" (\" + serialNumber + \")\"",
+  "apack.boardid": "\"BRD\" + boardId",
+  "apack.boardrev": "boardRevision",
+  "apack.partid": "mcuName",
+  "inspector.usbVid": "0x1366",
+  "inspector.delay": "3000",
+  "adapter_types": "JLink",
+  "export": {
+    "win32.x86_64": {
+      "lib(libjlinkarm)": "JLink_x64.dll"
+    },
+    "linux.aarch64": {
+      "lib(libjlinkarm)": "libjlinkarm.so"
+    },
+    "linux.x86_64": {
+      "lib(libjlinkarm)": "libjlinkarm.so"
+    },
+    "macosx.aarch64": {
+      "lib(libjlinkarm)": "libjlinkarm.dylib"
+    },
+    "macosx.x86_64": {
+      "lib(libjlinkarm)": "libjlinkarm.dylib"
+    }
+  },
+  "executable": {
+    "commander:linux.x86_64": {
+      "exe": "commander"
+    },
+    "commander:linux.x86": {
+      "exe": "commander"
+    },
+    "commander:linux.aarch64": {
+      "exe": "commander"
+    },
+    "commander:win32.x86": {
+      "exe": "commander.exe"
+    },
+    "commander:win32.x86_64": {
+      "exe": "commander.exe"
+    },
+    "commander:macosx.x86_64": {
+      "exe": "commander"
+    },
+    "commander:macosx.aarch64": {
+      "exe": "commander"
+    }
+  },
+  "ui": {
+    "launchItem:mcu.arm.e.*32.*,mcu.8051.efm8.*,mcu.arm.wfm.si917.*,mcu.arm.si.*": {
+      "id": "simplicity_commander",
+      "category": "tools",
+      "icon": "commander40x40.png",
+      "label": "Simplicity Commander",
+      "launchUiFunction": "launchCommander",
+      "function": "launchCommander",
+      "toolTip": "Graphical and command-line utility to manage flash and security of EFM and EFR devices in development and production environments"
+    }
+  },
+  "function": {
+    "help": {
+      "cmd": "$(commander) --help"
+    },
+    "upload:mcu.arm.e.*32.*,mcu.arm.wf.wgm16.*,mcu.arm.wfm.*,mcu.arm.si.*": {
+      "cmd": "$(commander) --apack  ${external?extflash:flash} ${external?write:} ( --serialno ${sn} | --ip ${addr} ) [ --tif ${tif} ] [ --address ${starthex} ] [ ${run?:--halt} ] [ ${erasemode==full?--masserase:} ] [ --speed ${jlinkspeedkhz} ] [ -d ${part} ] [ --tokengroup znet [ --tokenfile ${encryptionKey} ] [ --tokenfile ${signingKey} ] ] [  ${file} ]  [  ${files} ] [ ${bootImage} ]"
+    },
+    "setDebugMode": {
+      "cmd": "$(commander) --apack adapter dbgmode ${mode} ( --serialno ${sn} | --ip ${addr} )"
+    },
+    "getDebugMode": {
+      "cmd": "$(commander) --apack adapter dbgmode ( --serialno ${sn} | --ip ${addr} )"
+    },
+    "inspect": {
+      "cmd": "$(commander) adapter list [ ${json?--json:} ]"
+    },
+    "writeFirmware": {
+      "cmd": "$(commander) --apack adapter fwupgrade ( --serialno ${sn} | --ip ${addr} ) ${file}"
+    },
+    "wstkSimpleApplicationUpload": {
+      "cmd": "$(commander) --apack flash ( --serialno ${sn} | --ip ${addr} ) [ -d ${part} ] ${file}"
+    },
+    "wstkApplicationUpload": {
+      "cmd": "$(commander) --apack ${external?extflash:flash} ${external?write:} ( --serialno ${sn} | --ip ${addr} ) [ --tif ${tif} ] [ --address ${start} ] [ ${run?:--halt} ] [ ${erasemode==full?--masserase:} ] [ --speed ${jlinkspeedkhz} ] [ -d ${part} ] [ --tokengroup znet --tokenfile ${encryptionKey} ] [ --tokenfile ${signingKey} ] ${file} [ ${bootImage} ]"
+    },
+    "launchCommander": {
+      "cmd": "$(commander)"
+    },
+    "detectPart": {
+      "cmd": "$(commander) ${json?--json:--apack} device info -d ${device} ( --serialno ${sn} | --ip ${addr} ) --tif ${tif}"
+    },
+    "readNvm3Firmware": {
+      "cmd": "$(commander) nvm3 read [ -d ${part} ] ( --serialno ${sn} | --ip ${addr} ) --outfile ${outfile}"
+    },
+    "parseNvm3FileDump": {
+      "cmd": "$(commander) nvm3 parse ${input} --key 0x0004"
+    },
+    "pageErase": {
+      "cmd": "$(commander) device pageerase [ -d ${part} ] ( --serialno ${sn} | --ip ${addr} ) ( --region ${region} | --range ${range} )"
+    },
+    "adapterProbe": {
+      "cmd": "$(commander) adapter probe ( --serialno ${sn} | --ip ${addr} ) [ ${json?--json:} ]"
+    },
+    "securityStatus": {
+      "cmd": "$(commander) security status ( --serialno ${sn} | --ip ${addr} ) [ ${json?--json:} ]"
+    },
+    "flash-bytes": {
+      "cmd": "$(commander) --apack flash ( --patch ${start}:${bytes}:${length} ) ( --serialno ${sn} | --ip ${addr} ) ( --tif ${tif} ) [ --speed ${jlinkspeedkhz} ] [ -d ${part} ] [ ${run?:--halt} ]"
+    },
+    "readRPSVersion": {
+      "cmd": "$(commander) util rpsinfo ( ${file} ) [ ${json?--json:} ]"
+    },
+    "loadRPSFile": {
+      "cmd": "$(commander) --apack rps load [ -d ${part} ] ( --serialno ${sn} | --ip ${addr} ) ( ${file} ) [ ${eraseapp?--eraseapp:} ]"
+    },
+    "readWiFiFwVersion": {
+      "cmd": "$(commander) manufacturing info [ -d ${part} ] ( --serialno ${sn} | --ip ${addr} ) [ ${json?--json:} ]"
+    },
+    "setNickName": {
+      "cmd": "$(commander) --apack adapter nick ${nickname} ( --serialno ${sn} | --ip ${addr} )"
+    },
+    "getNickName": {
+      "cmd": "$(commander) --apack adapter nick ( --serialno ${sn} | --ip ${addr} )"
+    },
+    "resetDevice": {
+      "cmd": "$(commander) --apack device reset ( --serialno ${sn} | --ip ${addr} )"
+    }
+  }
+}

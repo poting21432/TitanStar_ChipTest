@@ -1,0 +1,37 @@
+﻿<UserControl x:Class="Support.Wpf.UserControl_TaskProgress"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+              xmlns:local="clr-namespace:Support.Wpf" Background="{StaticResource SCB_ChartBackground_Medium}"
+             mc:Ignorable="d"  d:DataContext="{d:DesignInstance local:Model_TaskProgress}">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary x:Name="Resource_BlueEx" Source="/WpfApp.Themes.BlueEX;component/BlueEx/Pack.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Border BorderBrush="{StaticResource SCB_ChartRulerNum}" 
+    local:Behavior.IsBlinking="{Binding IsError}" local:Behavior.BlinkColor="Red"
+    BorderThickness="2" Padding="10">
+        </Border>
+        <StackPanel>
+            <TextBlock Text="{Binding Message}" FontSize="30" TextWrapping="Wrap" Padding="10"
+        HorizontalAlignment="Center"/>
+            <Grid HorizontalAlignment="Center">
+                <ProgressBar Width="300" Height="30" Value="{Binding ProgressValue}" Background="{StaticResource SCB_ControlBackGround}" Margin="0 10"/>
+                <TextBlock Text="{Binding ProgressData}" 
+            local:Behavior.IsBlinking="{Binding IsError}" local:Behavior.BlinkColor="Red"
+            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Padding="10 0" local:Behavior.IsBlinking="{Binding IsError}" local:Behavior.BlinkColor="Red"
+        TextAlignment="Center" HorizontalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" Margin="20" HorizontalAlignment="Center">
+                <Button Content="重試" Command="{Binding CommandRetry}" IsEnabled="{Binding IsError}" Visibility="Collapsed" Width="150" Height="45" Margin="0 0 10 0"/>
+                <Button Content="取消" Command="{Binding CommandCancel}" Width="150" Height="45" Visibility="Collapsed"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

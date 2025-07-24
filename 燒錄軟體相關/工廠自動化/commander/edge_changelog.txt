@@ -1,0 +1,45 @@
+==============================================================
+Version 0.0.5
+==============================================================
+
+Added Features;
+ * Updated apack.json
+
+Resolved Issues;
+ * Index option would fail with start command on Windows
+
+
+==============================================================
+Version 0.0.4
+==============================================================
+
+Added Features;
+ * Updated start/stop command in apack.json
+ * Edge list also prints URL configuration
+
+Resolved Issues;
+ * Misc bug fixes
+
+
+==============================================================
+Version 0.0.3
+==============================================================
+
+Added Features;
+ * Added support to start/stop capture on single devices
+
+Resolved Issues;
+ * None
+
+
+==============================================================
+Version 0.0.2
+==============================================================
+
+Added Features;
+ * Allow groups to be created with given group ID
+ * Added "config" command to set a server URL to notify server about status updates
+
+Resolved Issues;
+ * Moved --output option to "start" command
+ * Improved JSON output

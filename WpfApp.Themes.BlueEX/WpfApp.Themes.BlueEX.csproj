@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="BlueEx\UI_BlueEx.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="BlueEx\Sub\Colors.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="BlueEx\Sub\Colors.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Resource>
+    <Resource Include="BlueEx\UI_BlueEx.png" />
+  </ItemGroup>
+
+</Project>

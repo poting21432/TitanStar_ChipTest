@@ -1,0 +1,19 @@
+﻿<UserControl x:Class="Support.Wpf.Compact.UserControl_DateSelect"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:Support.Wpf.Compact"
+             mc:Ignorable="d" Width="200" Height="30">
+    <UserControl.DataContext>
+        <local:Model_DateSelect/>
+    </UserControl.DataContext>
+    <DatePicker x:Name="datePickerCtl"
+                    Width="{Binding RelativeSource={RelativeSource FindAncestor,AncestorType={x:Type UserControl}},Path=ActualWidth}"
+                    Height="{Binding RelativeSource={RelativeSource FindAncestor,AncestorType={x:Type UserControl}},Path=ActualHeight}"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    SelectedDateFormat="Long" FirstDayOfWeek="Sunday" 
+                    DisplayDateStart="{Binding DisplayDateStart}" DisplayDateEnd="{Binding DisplayDateEnd}"
+                    IsTodayHighlighted="True" SelectedDate="{Binding Date}">
+    </DatePicker>
+</UserControl>

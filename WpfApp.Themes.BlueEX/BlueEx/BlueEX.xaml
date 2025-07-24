@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source=".\Sub\Colors.xaml"></ResourceDictionary>
+        <ResourceDictionary Source=".\Sub\Controls.xaml"></ResourceDictionary>
+        <ResourceDictionary Source=".\Sub\MenuItem.xaml"></ResourceDictionary>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

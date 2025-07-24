@@ -1,0 +1,12 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style TargetType="TextBlock" BasedOn="{StaticResource StyleTextBlock}"/>
+    <Style TargetType="TabItem" BasedOn="{StaticResource StyleTabItem}"/>
+    <Style TargetType="Button" BasedOn="{StaticResource StyleButton}"/>
+    <Style TargetType="CheckBox" BasedOn="{StaticResource StyleCheckBox}"/>
+    <Style TargetType="ComboBox" BasedOn="{StaticResource StyleComboBox}"/>
+    <Style TargetType="TextBox" BasedOn="{StaticResource StyleTextBox}"/>
+    <Style TargetType="GroupBox" BasedOn="{StaticResource StyleGroupBox}"/>
+    <Style TargetType="RadioButton" BasedOn="{StaticResource StyleRadioButton}"/>
+    <Style TargetType="DataGrid" BasedOn="{StaticResource StyleDataGrid_RowSelection}"/>
+</ResourceDictionary>

@@ -1,0 +1,80 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Color For Insider User Interface-->
+    <Color x:Key="C_InfoRegular">#568086</Color>
+    <SolidColorBrush x:Key="SCB_InfoRegular" Color="{StaticResource C_InfoRegular}"/>
+
+    <Color x:Key="C_InfoBold">#7399BB</Color>
+    <SolidColorBrush x:Key="SCB_InfoBold" Color="{StaticResource C_InfoBold}"/>
+
+    <Color x:Key="C_InfoUnderLine">#23775D</Color>
+    <SolidColorBrush x:Key="SCB_InfoUnderLine" Color="{StaticResource C_InfoUnderLine}"/>
+
+    <Color x:Key="C_InfoBackground">#192339</Color>
+    <SolidColorBrush x:Key="SCB_InfoBackground" Color="{StaticResource C_InfoBackground}"/>
+
+    <Color x:Key="C_InfoHighLight">#A0BCDA</Color>
+    <SolidColorBrush x:Key="SCB_InfoHighLight" Color="{StaticResource C_InfoHighLight}"/>
+    
+    <!-- Color For Outsider User Interface-->
+    <Color x:Key="C_UtilForeground">#466CAC</Color>
+    <SolidColorBrush x:Key="SCB_UtilForeground" Color="{StaticResource C_UtilForeground}"/>
+    
+    <Color x:Key="C_UtilBackground">#233152</Color>
+    <SolidColorBrush x:Key="SCB_UtilBackground" Color="{StaticResource C_UtilBackground}"/>
+    
+    <Color x:Key="C_UtilHighLight">#35937B</Color>
+    <SolidColorBrush x:Key="SCB_UtilHighLight" Color="{StaticResource C_UtilHighLight}"/>
+
+
+    <!-- Color For Chart , Canvas-->
+    <Color x:Key="C_ChartValue">#3774D3</Color>
+    <SolidColorBrush x:Key="SCB_ChartValue" Color="{StaticResource C_ChartValue}"/>
+
+    <Color x:Key="C_ChartBackground_VeryDark">#18243A</Color>
+    <SolidColorBrush x:Key="SCB_ChartBackground_VeryDark" Color="{StaticResource C_ChartBackground_VeryDark}"/>
+
+    <Color x:Key="C_ChartBackground_Dark">#1F2848</Color>
+    <SolidColorBrush x:Key="SCB_ChartBackground_Dark" Color="{StaticResource C_ChartBackground_Dark}"/>
+
+    <Color x:Key="C_ChartBackground_Medium">#1F2C4C</Color>
+    <SolidColorBrush x:Key="SCB_ChartBackground_Medium" Color="{StaticResource C_ChartBackground_Medium}"/>
+
+    <Color x:Key="C_ChartBackground_Light">#212E4E</Color>
+    <SolidColorBrush x:Key="SCB_ChartBackground_Light" Color="{StaticResource C_ChartBackground_Light}"/>
+
+    <Color x:Key="C_ChartRulerLine">#2A406E</Color>
+    <SolidColorBrush x:Key="SCB_ChartRulerLine" Color="{StaticResource C_ChartRulerLine}"/>
+
+    <Color x:Key="C_ChartRulerNum">#5988CF</Color>
+    <SolidColorBrush x:Key="SCB_ChartRulerNum" Color="{StaticResource C_ChartRulerNum}"/>
+
+    <!--Text Highlight-->
+    <Color x:Key="C_ControlText">#A5C2D2</Color>
+    <SolidColorBrush x:Key="SCB_ControlText" Color="{StaticResource C_ControlText}"/>
+
+    <Color x:Key="C_ControlBackGround">#648CCA</Color>
+    <SolidColorBrush x:Key="SCB_ControlBackGround" Color="{StaticResource C_ControlBackGround}"/>
+    
+    <Color x:Key="C_ControlHighLight">#759DDB</Color>
+    <SolidColorBrush x:Key="SCB_ControlHighLight" Color="{StaticResource C_ControlHighLight}"/>
+    <!-- Gradiant Brushes-->
+    
+    <LinearGradientBrush x:Key="LGB_VertLight" StartPoint="0,0" EndPoint="0,1" >
+        <GradientStop Color="#7092BF" Offset="0"/>
+        <GradientStop Color="#6F93CD" Offset="0.4"/>
+        <GradientStop Color="#5476B3" Offset="0.6"/>
+        <GradientStop Color="#4F6FAF" Offset="1"/>
+    </LinearGradientBrush>
+
+
+    <LinearGradientBrush x:Key="LGB_VertHighLight" StartPoint="0,0" EndPoint="0,1" >
+        <GradientStop Color="#81A3D0" Offset="0"/>
+        <GradientStop Color="#80A4DE" Offset="0.4"/>
+        <GradientStop Color="#6587C4" Offset="0.6"/>
+        <GradientStop Color="#6080C0" Offset="1"/>
+    </LinearGradientBrush>
+    
+    
+</ResourceDictionary>

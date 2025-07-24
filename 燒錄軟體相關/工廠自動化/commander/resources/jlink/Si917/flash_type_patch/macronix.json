@@ -1,0 +1,13 @@
+{
+    "qflash_config": {
+        "flash_type": 5,
+        "prot_top_bottom": 1,
+        "qspi_ddr_clk_en": 1,
+        "reset_type": 0,
+        "valid_prot_bits": 4,
+        "flash_pinset": 2
+    },
+    "flash_level1_protect_bits": 0,
+    "flash_level2_protect_bits": 1,
+    "flash_level3_protect_bits": 6
+}

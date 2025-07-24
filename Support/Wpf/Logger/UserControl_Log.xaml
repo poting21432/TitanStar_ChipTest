@@ -1,0 +1,12 @@
+﻿<UserControl x:Class="Support.Wpf.UserControl_Log"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" x:Name="UserControl_Logger">
+    <DockPanel>
+        <RichTextBox x:Name="RichTextBox_Log" Background="{StaticResource SCB_ChartBackground_VeryDark}" 
+                     Foreground="{StaticResource SCB_UtilHighLight}" FontSize="20" Margin="5 0"
+                     IsReadOnly="True" ScrollViewer.VerticalScrollBarVisibility="Visible"/>
+    </DockPanel>
+</UserControl>

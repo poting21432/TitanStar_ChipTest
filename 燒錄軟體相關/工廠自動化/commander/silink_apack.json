@@ -1,0 +1,80 @@
+{
+  "id": "silink",
+  "app_version": "0.5.5",
+  "label": "Silink adapter pack",
+  "featureLevel": 11,
+  "requiredFeatureLevel": "apack.core:6",
+  "path": [
+    ".",
+    "win64",
+    "linux_x86_64",
+    "macosx",
+    "../MacOS",
+    "../MacOS/macosx"
+  ],
+  "option": {
+    "log": {
+      "name": "Enable log",
+      "description": "Turns on the complete logging of traffic into a silink_<PID>.log file.",
+      "type": "boolean",
+      "default": "false"
+    },
+    "pollDelay": {
+      "name": "EMUCOM Polling Delay (uSec)",
+      "description": "Sets the polling delay in microseconds, for how regularly the EMUCOM port is polled for data.",
+      "type": "integer",
+      "default": "5000"
+    }
+  },
+  "executable": {
+    "silink:linux.x86_64": {
+      "exe": "silink"
+    },
+    "silink:linux.aarch64": {
+      "exe": "silink"
+    },
+    "silink:win32.x86_64": {
+      "exe": "silink.exe"
+    },
+    "silink:macosx.x86_64": {
+      "exe": "silink"
+    },
+    "silink:macosx.aarch64": {
+      "exe": "silink"
+    }
+  },
+  "function": {
+    "help": {
+      "cmd": "$(silink) -?"
+    },
+    "jlink-version": {
+      "cmd": "$(silink) -version"
+    },
+    "usb-adapter-list": {
+      "cmd": "$(silink) -list"
+    },
+    "empty": {
+      "cmd": "$(silink) -trace=${option:log}"
+    },
+    "silink": {
+      "cmd": "$(silink) -appdata [ -sn ${sn} ] -map ${maplist} -trace=${option:log} -polldelay=${option:pollDelay}",
+      "terminate": "quit"
+    },
+    "silink-automap": {
+      "cmd": "$(silink) [ -sn ${sn} ] -automap ${baseport} -trace=${option:log}",
+      "terminate": "quit"
+    }
+  },
+  "test": {
+    "help": {
+      "run": "help",
+      "expect": "Usage: silink [options]",
+      "method": "contains"
+    },
+    "version": {
+      "run": "jlink-version",
+      "expect": "JLinkARM version:",
+      "method": "contains"
+    }
+  }
+}
