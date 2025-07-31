@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:WpfApp_TestOmron" 
         xmlns:wpf="clr-namespace:Support.Wpf;assembly=Support"
         mc:Ignorable="d" Background="{StaticResource SCB_ChartBackground_Medium}"
-        Title="頻譜儀 讀寫測試工具" FontSize="25" Loaded="Window_Loaded" Height="1050">
+        Title="立捷頻譜儀 讀寫測試工具" FontSize="25" Loaded="Window_Loaded" Height="1050">
     <Window.DataContext>
         <local:Model_Main/>
     </Window.DataContext>

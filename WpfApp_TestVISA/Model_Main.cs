@@ -21,15 +21,18 @@ namespace WpfApp_TestOmron
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
 
-        public static string[] StrSteps = { 
+        public static readonly string[] StrSteps = [
             "等待探針到位", "燒錄處理", "等待電測程序",
             "3V,uA 電表測試" , "等待電表汽缸上升", "LED閃爍檢測" , "頻譜儀天線強度測試",
             "5V,mA 電表測試", "DIO探針(指撥1)LED檢測", "開關探針(指撥1)LED檢測",
             "開蓋按鈕LED檢測", "磁簧汽缸LED檢測", "2.4V LED閃爍檢測", "完成並記錄資訊"
-        };
-        
+        ];
+        private string PathBatBurn = "";
+        public ObservableCollection<string> AssignedTests { get; set; } = ["燒錄bat呼叫", "頻譜儀天線測試", "3V-uA電表測試", "5V-mA電表測試", "LED 閃爍計數檢測"];
+
         public ObservableCollection<string> VISA_Devices = [];
         public string DeviceVISA { get; set; } = "";
+        public ObservableCollection<Instruction> Instructions { get; set; } = [];
         public ObservableCollection<StepData> StepsData { get; set; } = [];
         public Dictionary<int, StepData?> MapSteps { get; set; } = [];
         public IMessageBasedSession? Session { get; set; }
@@ -105,7 +108,7 @@ namespace WpfApp_TestOmron
                         return;
                 });
 
-            });
+            }); 
             Command_Write = new RelayCommand<object>((obj) =>
             {
                 "命令".TryCatch(() =>
@@ -125,11 +128,54 @@ namespace WpfApp_TestOmron
             Task.Run(() =>
             {
                 Thread.Sleep(1000);
-                Command_Refresh.Execute(null);
+                Command_Refresh.Execute(null); 
             });
         }
-       
+        public void ProcedureMain()
+        {
+            Instructions.Clear();
+            Instructions = [
+                new(Order.WaitSiganl),
+                new(Order.WaitSiganl),
+                new(Order.WaitSiganl),
+                new(Order.WaitSiganl),
+                new(Order.WaitSiganl),
+                new(Order.WaitSiganl),
+            ];
+        }
     }
+    public enum Order
+    {
+        WaitSiganl,
+        Burn,
 
-   
+    }
+    [AddINotifyPropertyChangedInterface]
+    public class Instruction
+    {
+        public int? ID;
+        public object? Tag;
+        public Order? Order;
+
+        public Instruction(Order order, params object[] Parameters)
+        {
+            
+        }
+        private void WaitPLC()
+        {
+             
+        }
+        public bool LEDTest(int TargetCount, int MinCTms, int MaxCTms)
+        {
+            return false;
+        }
+        public double CurrentTest(int TargetVolt)
+        {
+            return 0.0;
+        }
+        public void BurnSequence()
+        {
+            
+        }
+    }
 }
