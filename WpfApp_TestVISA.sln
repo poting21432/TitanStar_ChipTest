@@ -9,6 +9,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp.Themes.BlueEX", "Wpf
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp_TestVISA", "WpfApp_TestVISA\WpfApp_TestVISA.csproj", "{F6A910F4-4486-402F-8DFA-634F871F5A46}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PLC", "PLC\PLC.csproj", "{DCB41EAC-D25C-4886-BD15-6B684964C38C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeviceDB", "DeviceDB\DeviceDB.csproj", "{17DFC1F3-0742-4EE3-89A9-A07BEF2A840B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +31,14 @@ Global
 		{F6A910F4-4486-402F-8DFA-634F871F5A46}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F6A910F4-4486-402F-8DFA-634F871F5A46}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F6A910F4-4486-402F-8DFA-634F871F5A46}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCB41EAC-D25C-4886-BD15-6B684964C38C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCB41EAC-D25C-4886-BD15-6B684964C38C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCB41EAC-D25C-4886-BD15-6B684964C38C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCB41EAC-D25C-4886-BD15-6B684964C38C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17DFC1F3-0742-4EE3-89A9-A07BEF2A840B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17DFC1F3-0742-4EE3-89A9-A07BEF2A840B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17DFC1F3-0742-4EE3-89A9-A07BEF2A840B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17DFC1F3-0742-4EE3-89A9-A07BEF2A840B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

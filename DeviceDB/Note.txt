@@ -1,0 +1,8 @@
+﻿Migration:產生連結db檔的程式碼
+dotnet ef migrations add InitialCreate --project .\Pyramid.Data.SQLite
+移除Migration
+ef migrations remove
+生成db檔
+dotnet ef database update --project .\Pyramid.Data.SQLite
+生成Entity Source
+Scaffold-DbContext "Data Source=data.db" Microsoft.EntityFrameworkCore.Sqlite -OutputDir Models

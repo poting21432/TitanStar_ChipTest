@@ -28,6 +28,9 @@ namespace WpfApp_TestOmron
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             SysLog.Add(LogLevel.Info, "程式啟動");
+
+            Instruction ins = new(1, "Test", Order.Burn);
+            ins.Execute();
         }
     }
 }
