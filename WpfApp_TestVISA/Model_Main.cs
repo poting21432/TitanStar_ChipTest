@@ -1,29 +1,27 @@
-﻿using PropertyChanged;
+﻿using Ivi.Visa;
+using Ivi.Visa.FormattedIO;
+using Modbus.Device;
+using PLC;
+using PropertyChanged;
 using Support;
 using Support.Data;
 using Support.Logger;
-using Support.Wpf.Models;
-using System.Windows.Input;
-using Ivi.Visa;
-using Ivi.Visa.FormattedIO;
-using System.Collections.ObjectModel;
-using System.Windows.Threading;
 using Support.Wpf;
-using System.Windows.Media;
-using System.Windows.Controls;
-using PLC;
-using WpfApp_TestVISA;
-using System.Threading;
-using Modbus.Device;
-using System.IO.Ports;
-using Modbus.Extensions.Enron;
-using System.Diagnostics.Metrics;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using Support.Wpf.Models;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
-namespace WpfApp_TestOmron
+using System.IO.Ports;
+using System.Net;
+using System.Threading;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
+using WpfApp_TestVISA;
+namespace WpfApp_TestVISA
 {
     [AddINotifyPropertyChangedInterface]
-    public class Model_Main
+    public partial class Model_Main
     {
         public static Dispatcher? DispMain;
         public string IP_Port { get; set; } = "192.168.0.1:9600";
@@ -31,16 +29,22 @@ namespace WpfApp_TestOmron
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
 
+        public int CurrentStepID = 0;
+
         public static readonly string[] StrSteps = [
             "等待探針到位", "燒錄處理", "等待電測程序",
-            "3V,uA 電表測試", "等待電表汽缸上升", "LED閃爍檢測", "頻譜儀天線強度測試",
-            "5V,mA 電表測試", "DIO探針(指撥1)LED檢測", "開關探針(指撥1)LED檢測",
-            "開蓋按鈕LED檢測", "磁簧汽缸LED檢測", "2.4V LED閃爍檢測", "完成並記錄資訊"
+            "3V,uA 電表測試", "等待電表汽缸上升", "3V導通 LED閃爍檢測",
+            "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
+            "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
+            "測試開關 - LED檢測", "頻譜儀天線強度測試", "完成並記錄資訊"
         ];
         private string PathBatBurn = "";
+
+        bool IsBusy { get; set; } = false;
         public ObservableCollection<string> AssignedTests { get; set; } = ["燒錄bat呼叫", "頻譜儀天線測試", "3V-uA電表測試", "5V-mA電表測試", "LED 閃爍計數檢測"];
 
-        public ObservableCollection<string> VISA_Devices = [];
+        public ObservableCollection<string> VISA_Devices { get; set; } = [];
+        public ObservableCollection<ProductRecord> ProductRecords { get; set; } = [];
         public string DeviceVISA { get; set; } = "";
         public ObservableCollection<Instruction> Instructions { get; set; } = [];
         public ObservableCollection<StepData> StepsData { get; set; } = [];
@@ -49,11 +53,17 @@ namespace WpfApp_TestOmron
         public ICommand Command_Refresh { get; set; }
         public ICommand Command_ConnectSwitch { get; set; }
         public ICommand Command_Write { get; set; }
-
+        public ICommand Commnad_MainSequence { get; set; }
+        public ICommand Commnad_MainReset { get; set; }
+        public ICommand Commnad_NextStep { get; set; }
+        public ProductRecord? CurrentProduct { get; set; }
         //public TcpClientApp TcpConnect { get; set; } = new();
         private bool isRefreshing = false;
         private bool IsConnected = false;
         MessageBasedFormattedIO? FormattedIO = null;
+
+        public bool IsModeStep { get; set; } = true;
+        public bool SignalNext = false;
         public Model_Main()
         {
             ///重要: 使用這個函式庫需要先安裝 Library Suite
@@ -127,6 +137,19 @@ namespace WpfApp_TestOmron
                     SysLog.Add(LogLevel.Success, $"已接收: {FormattedIO?.ReadLine()}");
                 });
             });
+
+            Commnad_MainSequence = new RelayCommand<object>((obj) =>
+            {
+                ProcedureMain();
+            });
+            Commnad_MainReset = new RelayCommand<object>((obj) =>
+            {
+                ProcedureReset();
+            });
+            Commnad_NextStep = new RelayCommand<object>((obj) =>
+            {
+                SignalNext = true;
+            });
             int sid = 1;
             foreach (var step in StrSteps)
             {
@@ -141,9 +164,87 @@ namespace WpfApp_TestOmron
                 Command_Refresh.Execute(null);
             });
         }
-        public void ProcedureMain()
+        bool IsReseting = false;
+        public void ProcedureReset()
         {
-            Instructions.Clear();
+            if (IsReseting)
+                return;
+            IsReseting = true;
+            //燒錄
+            Global.PLC.WriteOneData("M3007", 0);
+            //電路
+            Global.PLC.WriteOneData("M3011", 0);//2.4V
+            Global.PLC.WriteOneData("M3010", 0);
+            Global.PLC.WriteOneData("M3003", 0);//5V
+            Global.PLC.WriteOneData("M3004", 0);
+            Global.PLC.WriteOneData("M3008", 0);//3V
+            Global.PLC.WriteOneData("M3009", 0);
+            //汽缸
+            Global.PLC.WriteOneData("M3014", 0);
+            Global.PLC.WriteOneData("M3006", 0);
+            //開關
+            Global.PLC.WriteOneData("M3001", 0);
+            Global.PLC.WriteOneData("M3002", 0);
+            Global.PLC.WriteOneData("M3005", 0);
+            if (Global.PLC.ReadOneData("M4000").ReturnValue != 0)
+            {
+                SysLog.Add(LogLevel.Info, "確認升降汽缸在上定位");
+                Thread.Sleep(500);
+                SysLog.Add(LogLevel.Info, "升降汽缸下降 M3013 -> 1");
+                Global.PLC.WriteOneData("M3013", 1);
+                Thread.Sleep(1000);
+                while (Global.PLC.ReadOneData("M4001").ReturnValue == 0)
+                    Thread.Sleep(500);
+                SysLog.Add(LogLevel.Info, "確認汽缸已在下定位 M4001 == 1");
+                Global.PLC.WriteOneData("M3013", 0);
+                SysLog.Add(LogLevel.Info, "升降汽缸下降復歸 M3013 -> 0");
+            }
+            IsReseting = false;
+        }
+
+       
+        private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null)
+        {
+            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, Count, 10000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 {Count}次: M4003 ^v {Count}"),
+                OnEnd = (Ins) =>
+                {
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else
+                    {
+                        SysLog.Add(LogLevel.Info, $"確認閃爍{Count}次");
+                        ExtAction?.Invoke();
+                        Thread.Sleep(1000);
+                    }
+                }
+            });
+        }
+        public void NextStep()
+        {
+            DispMain?.Invoke(() =>
+            {
+                MapSteps.TryGetValue(CurrentStepID, out var step);
+                step?.SetEnd();
+                CurrentStepID++;
+                if (CurrentStepID < 0)
+                    CurrentStepID = 0;
+                if (CurrentStepID < StepsData.Count)
+                {
+                    MapSteps.TryGetValue(CurrentStepID, out step);
+                    step?.SetStart();
+                }
+            });
+        }
+        public void ResetSteps()
+        {
+            DispMain?.Invoke(() =>
+            {
+                CurrentStepID = 0;
+                foreach (var step in StepsData)
+                    step.Reset();
+            });
         }
     }
 
@@ -157,6 +258,7 @@ namespace WpfApp_TestOmron
     }
     public enum Order
     {
+        Custom,
         WaitPLCSiganl,
         SendPLCSignal,
         Burn,
@@ -165,229 +267,24 @@ namespace WpfApp_TestOmron
         WaitModbus,
         ReadModbusFloat,
     }
+    
     [AddINotifyPropertyChangedInterface]
-    public class Instruction(int ID, string Title, Order? InsOrder, params object[] Parameters)
+    public class ProductRecord
     {
-        public int? ID { get; set; } = ID;
-        public string Title { get; set; } = Title;
-        public object? Tag { get; set; }
-        public Order? InsOrder { get; set; } = InsOrder;
-        public bool AbortSignal { get; private set; }
-        public object?[] Parameters { get; set; } = Parameters;
-
-        public object? Result { get; set; }
-        private string InstructionMessage => $"指令{ID}-{InsOrder}-{Title}";
-        public ExcResult Execute()
-        {
-            Result = null;
-            try
-            {
-                switch (InsOrder)
-                {
-                    case Order.SendPLCSignal:
-                        return SendPLC();
-                    case Order.WaitPLCSiganl:
-                        return WaitPLC();
-                    case Order.Burn:
-                        return BurnSequence();
-                    case Order.PLCSignalCount:
-                        return SignalCounter();
-                    case Order.SendModbus:
-                        return SendModbus();
-                    case Order.ReadModbusFloat:
-                        Result = ReadModbusFloat();
-                        return ExcResult.Success;
-                    case Order.WaitModbus:
-                        return WaitModbus();
-                }
-            }catch(Exception)
-            {
-                return ExcResult.Error;
-            }
-            
-            return ExcResult.NotSupport;
-        }
-        private ExcResult SendPLC()
-        {
-            if (Parameters.Length != 4)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-            string? Mem = Parameters[1] as string;
-            if (Parameters[0] is not PLCHandler handler || string.IsNullOrEmpty(Mem) ||
-                Parameters[2] is not short Value)
-            throw new Exception($"{InstructionMessage}: 參數為空值");
-            var result = handler.WriteOneData(Mem, Value);
-            Thread.Sleep(GlobalConfig.PLCDelayMs);
-            return (result.IsSuccess)? ExcResult.Success: ExcResult.Error;
-        }
-
-        private ExcResult WaitPLC()
-        {
-            if (Parameters.Length != 4)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-            string? Mem = Parameters[1] as string;
-            short? targetValue = (short?)Parameters[2];
-            short? TimeOutMs = (short?)Parameters[3];
-            if ( Parameters[0] is not PLCHandler handler || string.IsNullOrEmpty(Mem))
-                throw new Exception($"{InstructionMessage}: 參數為空值");
-
-            DateTime startT = DateTime.Now;
-            while (!AbortSignal)
-            {
-                if (TimeOutMs > 0 && (DateTime.Now - startT).TotalMilliseconds > TimeOutMs)
-                    return ExcResult.TimeOut;
-
-                var result = handler.ReadOneData(Mem);
-                if (result.IsSuccess)
-                {
-                    if (result.ReturnValue == targetValue)
-                        return ExcResult.Success;
-                }
-                else return ExcResult.Error;
-                Thread.Sleep(GlobalConfig.PLCDelayMs);
-            }
-            return ExcResult.Abort; 
-        }
-        private ExcResult SignalCounter()
-        {
-            if (Parameters.Length != 4)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-            string? Mem = Parameters[1] as string;
-            short? targetCount = (short?)Parameters[2];
-            short? TimeOutMs = (short?)Parameters[3];
-            if (Parameters[0] is not PLCHandler handler || string.IsNullOrEmpty(Mem))
-                throw new Exception($"{InstructionMessage}: 參數為空值");
-            int count = 0;
-            short last_value = 0;
-
-            DateTime startT = DateTime.Now;
-            while (!AbortSignal)
-            {
-                if (TimeOutMs > 0 && (DateTime.Now - startT).TotalMilliseconds > TimeOutMs)
-                    return ExcResult.TimeOut;
-                var result = handler.ReadOneData(Mem);
-                if (result.IsSuccess)
-                {
-                    if (result.ReturnValue == 0 && last_value == 1)
-                        count++;
-                    last_value = result.ReturnValue;
-                }
-                else return ExcResult.Error;
-                if(count == targetCount)
-                    return ExcResult.Success;
-                Thread.Sleep(GlobalConfig.PLCDelayMs);
-            }
-            return ExcResult.Abort;
-        }
-        private ExcResult SendModbus()
-        {
-            if (Parameters.Length != 2)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-
-            SerialPort port = GlobalConfig.ModbusPort;
-            var master = ModbusSerialMaster.CreateRtu(port);
-            if (Parameters[0] is not ushort regAddr || // 0x001F; // DEC 31
-                Parameters[1] is not ushort value)     // 1=Low, 2=High
-                throw new Exception($"{InstructionMessage}: 參數為空值");
-            port.Open();
-            byte slaveId = 1;
-            master.WriteSingleRegister(slaveId, regAddr, value);
-            port.Close();
-            return ExcResult.Success;
-        }
-        private float ReadModbusFloat()
-        {
-            if (Parameters.Length != 1)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-            ushort[] regs =[];
-            SerialPort port = GlobalConfig.ModbusPort;
-            
-            var master = ModbusSerialMaster.CreateRtu(port);
-            if (Parameters[0] is not ushort regAddr) // 0x0030(48): 低量程電流 //0x0032(50): 高量程電流
-                throw new Exception($"{InstructionMessage}: 參數為空值");
-
-            port.Open();
-            byte slaveId = 1;
-            regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
-            port.Close();
-            if(regs.Length == 4)
-                return ConvertFloatFromRegisters(regs);
-
-            return 0.0f;
-        }
-        private ExcResult WaitModbus()
-        {
-            if (Parameters.Length != 3)
-                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-            ushort[] regs = [];
-            SerialPort port = GlobalConfig.ModbusPort;
-
-            var master = ModbusSerialMaster.CreateRtu(port);
-            if (Parameters[0] is not ushort regAddr || //讀取目前使用量程狀態 (0x37)55 
-                Parameters[1] is not ushort targetValue ||
-                Parameters[2] is not short TimeOutMs)
-                throw new Exception($"{InstructionMessage}: 參數為空值");
-            port.Open();
-            DateTime startT = DateTime.Now;
-            while (!AbortSignal)
-            {
-                if (TimeOutMs > 0 && (DateTime.Now - startT).TotalMilliseconds > TimeOutMs)
-                    return ExcResult.TimeOut;
-                byte slaveId = 1;
-                regs = master.ReadHoldingRegisters(slaveId, regAddr, 1);
-                if (regs[0] == targetValue)
-                    return ExcResult.Success;
-                Thread.Sleep(GlobalConfig.ModbusDelayMs);
-            }
-            return ExcResult.Abort;
-
-        }
-        private ExcResult BurnSequence()
-        {
-            var process = new Process();
-            process.StartInfo.FileName = GlobalConfig.BurnSequenceBAT;
-            process.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
-            process.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出
-            process.StartInfo.RedirectStandardError = true;    // 重定向錯誤輸出
-            process.StartInfo.CreateNoWindow = true;           // 不顯示 cmd 視窗
-
-            string stdOutput = "";
-            string stdError = "";
-
-            process.OutputDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                    stdOutput += e.Data + Environment.NewLine;
-            };
-
-            process.ErrorDataReceived += (sender, e) =>
-            {
-                if (e.Data != null)
-                    stdError += e.Data + Environment.NewLine;
-            };
-
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            process.WaitForExit(); // 等待執行完成
-
-            string output = stdOutput;
-            string error = stdError;
-            if (output.Contains("ERROR") || error.Contains("ERROR"))
-                return ExcResult.Error;
-            if (output.Contains("Flashing completed successfully!") &&
-                output.Contains("DONE"))
-                return ExcResult.Success;
-            return ExcResult.Error;
-        }
-
-        private static float ConvertFloatFromRegisters(ushort[] regs)
-        {
-            byte[] bytes = new byte[4];
-            bytes[1] = (byte)(regs[0] & 0xFF);
-            bytes[0] = (byte)(regs[0] >> 8);
-            bytes[3] = (byte)(regs[1] & 0xFF);
-            bytes[2] = (byte)(regs[1] >> 8);
-            return BitConverter.ToSingle(bytes, 0);
-        }
+        public int ID { get; set; }
+        public DateTime TimeStart { get; set; } = DateTime.Now;
+        public DateTime? TimeEnd { get; set; }
+        public string? BurnCheck { get; set; }
+        public float? Test3VuA { get; set; }
+        public string? OnCheck { get; set; }
+        public string? DIOCheck { get; set; }
+        public string? Switch1Check { get; set; }
+        public string? Switch2Check { get; set; }
+        public string? CoverCheck { get; set; }
+        public float? Test5VmA { get; set; }
+        public string? ReedCheck { get; set; }
+        public string? LowVCheck { get; set; }
+        public string? OnOffCheck { get; set; }
+        public string? TestAntenna { get; set; }
     }
 }

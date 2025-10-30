@@ -11,7 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-namespace WpfApp_TestOmron
+namespace WpfApp_TestVISA
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml
@@ -20,7 +20,6 @@ namespace WpfApp_TestOmron
     {
         public MainWindow()
         {
-
             Model_Main.DispMain = Dispatcher;
             InitializeComponent();
         }
@@ -28,9 +27,7 @@ namespace WpfApp_TestOmron
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             SysLog.Add(LogLevel.Info, "程式啟動");
-
-            Instruction ins = new(1, "Test", Order.Burn);
-            ins.Execute();
+            Global.Initialize();
         }
     }
 }

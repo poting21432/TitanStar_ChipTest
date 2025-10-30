@@ -1,0 +1,4 @@
+﻿[*.cs]
+
+# CA1416: 驗證平台相容性
+dotnet_diagnostic.CA1416.severity = suggestion

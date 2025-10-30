@@ -1,0 +1,13 @@
+﻿Name,Title,Type,Description,IPAddress
+QR_CSFR_In,電芯檢測站,SICK,QR讀取頭:對應ACIR測試,192.168.3.33:2112,
+QR_CSFR_Out,分揀取出站,SICK,QR讀取頭:對應分揀取出,192.168.3.34:2112,
+QR_CSFR_Bundle,電池堆疊站,Keyence,QR讀取頭:對應第一組電池組,192.168.3.35:9004
+QR_TorqueB,扭力鎖附站,Keyence,QR讀取頭:扭力B站,192.168.3.38:9004
+QR_TestA,Hipot一站,Keyence,QR讀取頭:對應VAE、Hipot,192.168.3.39:9004
+QR_CCD,CCD修正站,Keyence,QR讀取頭:照相電極辨識,192.168.3.40:9004
+QR_BusAssb,上蓋移載站,Keyence,QR讀取頭:線材上蓋組裝,192.168.3.41:9004
+QR_Laser4KW,4KW雷射站,Keyence,QR讀取頭:4KW雷焊機,192.168.3.42:9004
+QR_WeildCheck,焊點檢測站,Keyence,QR讀取頭:焊道檢測,192.168.3.43:9004
+QR_TestB,Hipot二站,Keyence,QR讀取頭:對應ACIR、Hipot,192.168.3.44:9004
+QR_NTC,NTC測試站,Keyence,QR讀取頭:NTC測試,192.168.3.45:9004
+QR_LengthCheck,長度檢測站,Keyence,QR讀取頭:長度檢測,192.168.3.49:9004

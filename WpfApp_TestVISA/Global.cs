@@ -1,4 +1,7 @@
-﻿using PropertyChanged;
+﻿using PLC;
+using PropertyChanged;
+using Support;
+using Support.Logger;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,11 +14,12 @@ using System.Threading.Tasks;
 namespace WpfApp_TestVISA
 {
     [AddINotifyPropertyChangedInterface]
-    public static class GlobalConfig
+    public static class Global
     {
-        public static int PLCDelayMs { get; set; } = 100;
+        public static int PLCDelayMs { get; set; } = 50;
         public static int ModbusDelayMs { get; set; } = 500;
 
+        public static PLCHandler PLC = new();
         public static string BurnSequenceBAT { get; set; } = @".\20250520_ZB_SPMG50_V2.0.1\ZB_SPMG50_V2_0_1_250520.BAT";
 
         public static SerialPort ModbusPort = new("COM3")
@@ -25,6 +29,15 @@ namespace WpfApp_TestVISA
             Parity = Parity.None,
             StopBits = StopBits.One
         };
+
+        public static void Initialize()
+        {
+            var result = PLC.Open(0, "");
+            if (result.IsSuccess)
+                SysLog.Add(LogLevel.Info, $"PLC 0 已連線: {result.ReturnCode}");
+            else
+                SysLog.Add(LogLevel.Error, $"PLC 0連線失敗: {result.ReturnCode}");
+        }
         public static void InitializeConfig()
         {
 

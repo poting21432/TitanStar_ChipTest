@@ -33,9 +33,17 @@ namespace Support.Wpf
         private readonly DispatcherTimer _timer = new();
         public StepData()
         {
-            _timer = new();
-            _timer.Interval = TimeSpan.FromSeconds(0.1);
+            _timer = new() {
+                Interval = TimeSpan.FromSeconds(0.1)
+            };
             _timer.Tick += Timer_Tick!;
+        }
+        public void Reset()
+        {
+            IsFinished = false;
+            ColorBrush = OrigColor;
+            _timer.Stop();
+            Status = Status.Stop;
         }
         public void SetStart()
         {
@@ -55,6 +63,16 @@ namespace Support.Wpf
             TimeCost = (EndTime - StartTime).TotalSeconds;
             _timer.Stop();
             Status = Status.Completed;
+        }
+        public void SetError()
+        {
+            EndTime = DateTime.Now;
+            TimeTag = TimeData;
+            IsFinished = true;
+            ColorBrush = OrigColor;
+            TimeCost = (EndTime - StartTime).TotalSeconds;
+            _timer.Stop();
+            Status = Status.Error;
         }
         private void Timer_Tick(object sender, EventArgs e)
         {

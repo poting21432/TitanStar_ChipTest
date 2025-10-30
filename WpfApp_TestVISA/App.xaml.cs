@@ -3,8 +3,8 @@ using System.Configuration;
 using System.Data;
 using System.Windows;
 using System.Windows.Controls;
-
-namespace WpfApp_TestOmron
+using Support.ThreadHelper;
+namespace WpfApp_TestVISA
 {
     /// <summary>
     /// Interaction logic for App.xaml
@@ -15,7 +15,11 @@ namespace WpfApp_TestOmron
         {
             return Container.Resolve<MainWindow>();
         }
-
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+            ThreadExtensions.CheckApplicationDuplicated();
+        }
         protected override void RegisterTypes(IContainerRegistry containerRegistry)
         {
 

@@ -35,10 +35,9 @@ namespace WpfApp_TestOmron
                 List<StatusCode> codes = [];
                 try
                 {
-
                     codes.FromCSV("./StatusCode.csv");
                     StatusCode = codes.ToDictionary(x => x.Code);
-                }catch(Exception e)
+                }catch(Exception)
                 {
 
                 }
