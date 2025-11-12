@@ -30,4 +30,31 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="G51_BAT\20250520_ZB_SPMG50_V2.0.1.s37">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="G51_BAT\READY ME.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="G51_BAT\tokenFile.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="G51_BAT\tokens-example-efr32.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="G51_BAT\ZB_SPMG50_V2_0_1_250520.BAT">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="ZBRT_BAT\tokenFile.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="ZBRT_BAT\ZB_RT050_V2.0.0.250422.BAT">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="ZBRT_BAT\ZB_RT050_V2.0.0.250422.s37">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

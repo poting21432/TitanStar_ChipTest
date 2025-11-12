@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
-namespace DeviceDB.Models;
+namespace DeviceDB;
 
 public partial class MainDBContext : DbContext
 {

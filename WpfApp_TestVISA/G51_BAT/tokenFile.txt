@@ -1,0 +1,4 @@
+# This token file sets the EUI64 and MFG string:
+TOKEN_MFG_STRING: "ZB_SPMG50_V2.0.1"
+TOKEN_MFG_BOARD_NAME: ".250520"
+

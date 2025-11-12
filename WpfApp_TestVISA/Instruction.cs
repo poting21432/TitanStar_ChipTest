@@ -1,11 +1,15 @@
-﻿using Modbus.Device;
+﻿using DeviceDB;
+using Modbus.Device;
+using Modbus.Extensions.Enron;
 using PLC;
 using PropertyChanged;
 using Support;
+using Support.Data;
 using Support.Logger;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Text;
@@ -14,6 +18,17 @@ using WpfApp_TestOmron;
 
 namespace WpfApp_TestVISA
 {
+    public enum Order
+    {
+        Custom,
+        WaitPLCSiganl,
+        SendPLCSignal,
+        Burn,
+        PLCSignalCount,
+        SendModbus,
+        WaitModbus,
+        ReadModbusFloat,
+    }
     [AddINotifyPropertyChangedInterface]
     public class Instruction(int ID, string Title, Order? InsOrder, params object[] Parameters)
     {
@@ -109,8 +124,8 @@ namespace WpfApp_TestVISA
             if (Parameters.Length != 4)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
             string? Mem = Parameters[1] as string;
-            short? targetCount = (short?)Parameters[2];
-            short? TimeOutMs = (short?)Parameters[3];
+            short targetCount = (short)Parameters[2]!;
+            int TimeOutMs = Parameters[3].ToInt()!;
             if (Parameters[0] is not PLCHandler handler || string.IsNullOrEmpty(Mem))
                 throw new Exception($"{InstructionMessage}: 參數為空值");
             int count = 0;
@@ -141,40 +156,51 @@ namespace WpfApp_TestVISA
         }
         private ExcResult SendModbus()
         {
-            return ExcResult.Success;
+            if (Global.ModbusPort == null)
+            {
+                SysLog.Add(LogLevel.Error, "電表序列埠未設定");
+                return ExcResult.Error;
+            }
             if (Parameters.Length != 2)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-
-            SerialPort port = Global.ModbusPort;
-            var master = ModbusSerialMaster.CreateRtu(port);
             if (Parameters[0] is not ushort regAddr || // 0x001F; // DEC 31
                 Parameters[1] is not ushort value)     // 1=Low, 2=High
                 throw new Exception($"{InstructionMessage}: 參數為空值");
+            SerialPort port = Global.ModbusPort ?? throw new Exception($"電表序列埠未設定");
+
+            if (port.IsOpen)
+                port.Close();
             port.Open();
             byte slaveId = 1;
-            master.WriteSingleRegister(slaveId, regAddr, value);
+            var master = ModbusSerialMaster.CreateRtu(port);
+            master.WriteMultipleRegisters(slaveId, regAddr, [value]);
             port.Close();
             return ExcResult.Success;
         }
         private float ReadModbusFloat()
         {
-
-            ExcResult = ExcResult.Success;
-            return (float)0.1;
+            if (Global.ModbusPort == null)
+            {
+                SysLog.Add(LogLevel.Error, "電表序列埠未設定");
+                ExcResult = ExcResult.Error;
+                return (float)0.0;
+            }
             if (Parameters.Length != 1)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
             ushort[] regs = [];
             SerialPort port = Global.ModbusPort;
 
             var master = ModbusSerialMaster.CreateRtu(port);
-            if (Parameters[0] is not ushort regAddr) // 0x0030(48): 低量程電流 //0x0032(50): 高量程電流
+            if (Parameters[0] is not ushort regAddr) // 0x30(48): 低量程電流 //0x32(50): 高量程電流
                 throw new Exception($"{InstructionMessage}: 參數為空值");
 
+            if (port.IsOpen)
+                port.Close();
             port.Open();
             byte slaveId = 1;
             regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
             port.Close();
-            if (regs.Length == 4)
+            if (regs.Length == 2)
             {
                 ExcResult = ExcResult.Success;
                 return ConvertFloatFromRegisters(regs);
@@ -187,8 +213,11 @@ namespace WpfApp_TestVISA
         }
         private ExcResult WaitModbus()
         {
-            Thread.Sleep(1000);
-            return ExcResult.Success;
+            if (Global.ModbusPort == null)
+            {
+                SysLog.Add(LogLevel.Error, "電表序列埠未設定");
+                return ExcResult.Error;
+            }
             if (Parameters.Length != 3)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
             ushort[] regs = [];
@@ -199,6 +228,8 @@ namespace WpfApp_TestVISA
                 Parameters[1] is not ushort targetValue ||
                 Parameters[2] is not int TimeOutMs)
                 throw new Exception($"{InstructionMessage}: 參數為空值");
+            if (port.IsOpen)
+                port.Close();
             port.Open();
             DateTime startT = DateTime.Now;
             while (!AbortSignal)
@@ -216,8 +247,25 @@ namespace WpfApp_TestVISA
         }
         private ExcResult BurnSequence()
         {
+            Thread.Sleep(5000);
+            return ExcResult.Success;
+            if (Parameters.Length != 1)
+                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
+            string BurnBAT = Parameters[0]?.ToString() ?? "";
             var process = new Process();
-            process.StartInfo.FileName = Global.BurnSequenceBAT;
+            Global.BATPath.TryGetValue(BurnBAT, out Config? config);
+            if (string.IsNullOrEmpty(config?.Value))
+            {
+                SysLog.Add(LogLevel.Error, $"未設定{BurnBAT} BAT路徑");
+                return ExcResult.Error;
+            }
+            Global.CurrentBurnBATPath = config?.Value ?? "";
+            if (!Path.Exists(Global.CurrentBurnBATPath))
+            {
+                SysLog.Add(LogLevel.Error, $"{BurnBAT} BAT路徑 {Global.CurrentBurnBATPath}");
+                return ExcResult.Error;
+            }
+            process.StartInfo.FileName = Global.CurrentBurnBATPath;
             process.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
             process.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出
             process.StartInfo.RedirectStandardError = true;    // 重定向錯誤輸出
@@ -256,10 +304,10 @@ namespace WpfApp_TestVISA
         private static float ConvertFloatFromRegisters(ushort[] regs)
         {
             byte[] bytes = new byte[4];
-            bytes[1] = (byte)(regs[0] & 0xFF);
             bytes[0] = (byte)(regs[0] >> 8);
-            bytes[3] = (byte)(regs[1] & 0xFF);
-            bytes[2] = (byte)(regs[1] >> 8);
+            bytes[1] = (byte)(regs[0] & 0xFF);
+            bytes[3] = (byte)(regs[1] >> 8);
+            bytes[2] = (byte)(regs[1] & 0xFF);
             return BitConverter.ToSingle(bytes, 0);
         }
     }

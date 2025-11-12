@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DeviceDB.Models;
+namespace DeviceDB;
 
 public partial class TestRecord
 {

@@ -1,4 +1,5 @@
-﻿using Ivi.Visa;
+﻿using DeviceDB;
+using Ivi.Visa;
 using Ivi.Visa.FormattedIO;
 using Modbus.Device;
 using PLC;
@@ -8,6 +9,7 @@ using Support.Data;
 using Support.Logger;
 using Support.Wpf;
 using Support.Wpf.Models;
+using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO.Ports;
@@ -28,6 +30,7 @@ namespace WpfApp_TestVISA
         public string WriteData { get; set; } = "*IDN?";
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
+
 
         public int CurrentStepID = 0;
 
@@ -56,16 +59,65 @@ namespace WpfApp_TestVISA
         public ICommand Commnad_MainSequence { get; set; }
         public ICommand Commnad_MainReset { get; set; }
         public ICommand Commnad_NextStep { get; set; }
+        public ICommand Command_SetPowerMeter_High { get; set; }
+        public ICommand Command_SetPowerMeter_Low { get; set; }
+        public ICommand Command_TestPowerMeter_Low { get; set; }
+        public ICommand Command_TestPowerMeter_High { get; set; }
+        public ICommand Command_TestBurn { get; set; }
+
+        public ICommand Command_PhotoresistTest { get; set; }
+        public ObservableCollection<string> BurnTypes { get; set; } = ["PathBAT_G51", "PathBAT_ZBRT"];
+        public ObservableCollection<PLCData> PLCAddrData { get; set; } = [];
+        public PLCAddr? SelectedPLCAddr { get; set; }
+        public string SelectedBurnType { get; set; } = "PathBAT_G51";
+
         public ProductRecord? CurrentProduct { get; set; }
         //public TcpClientApp TcpConnect { get; set; } = new();
         private bool isRefreshing = false;
         private bool IsConnected = false;
         MessageBasedFormattedIO? FormattedIO = null;
-
-        public bool IsModeStep { get; set; } = true;
+        public bool IsModeStep { get; set; } = false;
         public bool SignalNext = false;
         public Model_Main()
         {
+            Task.Run(() =>
+            {
+                while (!Global.IsInitialized)
+                    Thread.Sleep(500);
+                DispMain?.Invoke(() =>
+                {
+                    PLCAddrData.Clear();
+                    foreach(var addr in Global.PLCAddrs.Values)
+                    {
+                        PLCData data = new() { Id = addr.Id, Address = addr.Address, Title = addr.Title};
+                        PLCAddrData.Add(data);
+                    }
+                });
+            });
+            Task.Run(() =>
+            {
+                string[] PLCAddrList = [];
+                while (!Global.IsInitialized || PLCAddrData.Count != Global.PLCAddrs.Values.Count)
+                    Thread.Sleep(500);
+
+                PLCAddrList = PLCAddrData.Select(x => x.Address ?? "").ToArray();
+                "PLC同步".TryCatch(() =>
+                {
+                    while (true)
+                    {
+                        Thread.Sleep(500);
+                        var result = Global.PLC.ReadRandomData(PLCAddrList);
+                        DispMain?.Invoke(() =>
+                        {
+                            using (Dispatcher.CurrentDispatcher.DisableProcessing())
+                            {
+                                for(int i =0;i< PLCAddrData.Count; i++)
+                                    PLCAddrData[i].Status = result.ReturnValues[i];
+                            }
+                        });
+                    }
+                });
+            });
             ///重要: 使用這個函式庫需要先安裝 Library Suite
             ///https://www.keysight.com/tw/zh/lib/software-detail/computer-software/io-libraries-suite-downloads-2175637.html
             Command_Refresh = new RelayCommand<object>((obj) => {
@@ -144,11 +196,120 @@ namespace WpfApp_TestVISA
             });
             Commnad_MainReset = new RelayCommand<object>((obj) =>
             {
-                ProcedureReset();
+                Task.Run(()=> ProcedureReset());
             });
             Commnad_NextStep = new RelayCommand<object>((obj) =>
             {
                 SignalNext = true;
+            });
+            Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
+            {
+                Instruction ins1 =(new(1, "切電表至低量程", Order.SendModbus, [(ushort)0x001F, (ushort)1])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至低量程:(0x001F)->1")
+                });
+                ins1.Execute();
+                
+            });
+            Command_SetPowerMeter_High = new RelayCommand<object>((obj) =>
+            {
+                Instruction ins1 = new(1, "切電表至高量程", Order.SendModbus, [(ushort)0x001F, (ushort)2])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至高量程:(0x001F)->2")
+                };
+                ins1.Execute();
+            });
+            Command_TestPowerMeter_Low = new RelayCommand<object>((obj) =>
+            {
+                Instruction ins1 = new(1, "檢查電表為低量程", Order.WaitModbus, [(ushort)0x36, (ushort)0, 5000])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "檢查電表為低量程:(0x36) == 0"),
+                    OnEnd = (Ins) =>
+                    {
+                        if (Ins.ExcResult == ExcResult.Success)
+                            SysLog.Add(LogLevel.Info, "已確認電表: 低量程");
+                        else
+                            SysLog.Add(LogLevel.Error, "電表量程檢查失敗");
+                    }
+                };
+                ins1.Execute();
+                if (ins1.ExcResult == ExcResult.Error)
+                    return;
+                Instruction ins2 =(new(2, "讀電表值(低量程)", Order.ReadModbusFloat, [(ushort)0x30])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取低量程電表數值:(0x30)"),
+                    OnEnd = (Ins) =>
+                    {
+                        float? uA = Ins.Result as float?;
+                        if (!uA.HasValue)
+                            Ins.ExcResult = ExcResult.Error;
+                        if (Ins.ExcResult == ExcResult.Success)
+                            SysLog.Add(LogLevel.Info, $"讀取電表數值(低量程):{Ins.Result}");
+                        else
+                            SysLog.Add(LogLevel.Error, "電表數值異常");
+                    }
+                });
+                ins2.Execute();
+            });
+            Command_TestPowerMeter_High = new RelayCommand<object>((obj) =>
+            {
+                Instruction ins1 = (new(2, "檢查電表為高量程", Order.WaitModbus, [(ushort)0x36, (ushort)1, 5000])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "檢查電表為高量程:(0x36) == 1"),
+                    OnEnd = (Ins) =>
+                    {
+                        if (Ins.ExcResult == ExcResult.Success)
+                            SysLog.Add(LogLevel.Info, "已確認電表: 高量程");
+                        else
+                            SysLog.Add(LogLevel.Error, "電表量程檢查失敗");
+                    }
+                });
+                ins1.Execute();
+                if (ins1.ExcResult == ExcResult.Error)
+                    return;
+                Instruction ins2 = (new(1, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x32])
+                {
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x32)"),
+                    OnEnd = (Ins) =>
+                    {
+                        float? uA = Ins.Result as float?;
+                        if (!uA.HasValue)
+                            Ins.ExcResult = ExcResult.Error;
+                        if (Ins.ExcResult == ExcResult.Success)
+                            SysLog.Add(LogLevel.Info, $"讀取電表數值(高量程):{Ins.Result}");
+                        else
+                            SysLog.Add(LogLevel.Error, "電表數值異常");
+                    }
+                });
+                ins2.Execute();
+            });
+            Command_TestBurn = new RelayCommand<object>((obj) =>
+            {
+                Instruction ins =(new(6, "燒錄", Order.Burn, SelectedBurnType) {
+                });
+                ins.Execute();
+            });
+            Command_PhotoresistTest = new RelayCommand<object>((obj) =>
+            {
+                Task.Run(() =>
+                {
+                    string photoresistor = "M7000";//Test
+                    Instruction ins = new(1, $"閃爍檢測4次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)4, 10000])
+                    {
+                        OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 4次: M7000 ^v 4"),
+                        OnEnd = (Ins) =>
+                        {
+                            if (Ins.ExcResult != ExcResult.Success)
+                                SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                            else
+                            {
+                                SysLog.Add(LogLevel.Info, $"確認閃爍4次");
+                                Thread.Sleep(1000);
+                            }
+                        }
+                    };
+                    ins.Execute();
+                });
             });
             int sid = 1;
             foreach (var step in StrSteps)
@@ -170,6 +331,7 @@ namespace WpfApp_TestVISA
             if (IsReseting)
                 return;
             IsReseting = true;
+
             //燒錄
             Global.PLC.WriteOneData("M3007", 0);
             //電路
@@ -179,16 +341,21 @@ namespace WpfApp_TestVISA
             Global.PLC.WriteOneData("M3004", 0);
             Global.PLC.WriteOneData("M3008", 0);//3V
             Global.PLC.WriteOneData("M3009", 0);
+            Thread.Sleep(1000);
             //汽缸
             Global.PLC.WriteOneData("M3014", 0);
             Global.PLC.WriteOneData("M3006", 0);
+            Thread.Sleep(1000);
             //開關
             Global.PLC.WriteOneData("M3001", 0);
             Global.PLC.WriteOneData("M3002", 0);
             Global.PLC.WriteOneData("M3005", 0);
+            Thread.Sleep(500);
+
             if (Global.PLC.ReadOneData("M4000").ReturnValue != 0)
             {
                 SysLog.Add(LogLevel.Info, "確認升降汽缸在上定位");
+                Global.PLC.WriteOneData("M3012", 0);
                 Thread.Sleep(500);
                 SysLog.Add(LogLevel.Info, "升降汽缸下降 M3013 -> 1");
                 Global.PLC.WriteOneData("M3013", 1);
@@ -201,11 +368,18 @@ namespace WpfApp_TestVISA
             }
             IsReseting = false;
         }
-
        
         private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null)
         {
-            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, Count, 10000])
+            /*
+            Instructions.Add(new(ID, $"閃爍檢測{Count}次-Bypass", Order.Custom)
+            {
+                OnStart = (ins) => Thread.Sleep(1000),
+                OnEnd = (ins) => SysLog.Add(LogLevel.Info, "閃爍檢測{Count}次-Bypass")
+            });
+            return;
+            */
+            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, 10000])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 {Count}次: M4003 ^v {Count}"),
                 OnEnd = (Ins) =>
@@ -256,17 +430,6 @@ namespace WpfApp_TestVISA
         TimeOut,
         NotSupport
     }
-    public enum Order
-    {
-        Custom,
-        WaitPLCSiganl,
-        SendPLCSignal,
-        Burn,
-        PLCSignalCount,
-        SendModbus,
-        WaitModbus,
-        ReadModbusFloat,
-    }
     
     [AddINotifyPropertyChangedInterface]
     public class ProductRecord
@@ -286,5 +449,24 @@ namespace WpfApp_TestVISA
         public string? LowVCheck { get; set; }
         public string? OnOffCheck { get; set; }
         public string? TestAntenna { get; set; }
+    }
+    [AddINotifyPropertyChangedInterface]
+    public class PLCData : PLCAddr
+    {
+        public short? Status { get; set; }
+        public static ICommand CommandSetTrue { get; set; } = new RelayCommand<PLCData>((data) => SetValue(data.Address, 1));
+        public static ICommand CommandSetFalse { get; set; } = new RelayCommand<PLCData>((data) => SetValue(data.Address, 0));
+        public PLCData()
+        {
+        }
+        static void SetValue(string? Address, short value)
+        {
+            if (string.IsNullOrEmpty(Address))
+            {
+                SysLog.Add(LogLevel.Error, "位置為空");
+                return;
+            }
+            Task.Run (()=> Global.PLC.WriteOneData(Address, value));
+        }
     }
 }

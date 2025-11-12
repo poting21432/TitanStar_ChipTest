@@ -8,17 +8,25 @@ using System.Data;
 using System.Linq.Expressions;
 using System.IO;
 using System.Data.Common;
-namespace Device
+namespace DeviceDB
 {
-    public partial class MainDBContext : DbContext
+    public class DBLocal
+    {
+        public ConifgsDBContext ConfigsDB { get; set; } = new();
+
+        public DataDBContext DataDB { get; set; } = new();
+    }
+
+
+    public partial class ConifgsDBContext : DbContext
     {
         public bool IsEnable { get; set; } = true;
 
-        public string DBPath { get; set; } = "data.db";
+        public string DBPath { get; set; } = "configs.db";
 
         public string DbConnectionString => string.Format("DataSource={0}", DBPath);
 
-        public MainDBContext()
+        public ConifgsDBContext()
         {
 
         }
@@ -31,8 +39,33 @@ namespace Device
         {
             if (File.Exists(DBPath))
                 optionsBuilder.UseSqlite(DbConnectionString);
-            //else
-            //SysLog.Add(LogLevel.Error, $"資料讀取失敗:{DBPath}");
+            else
+                throw new($"資料表:{DBPath}不存在");
+        }
+    }
+    public partial class DataDBContext : DbContext
+    {
+        public bool IsEnable { get; set; } = true;
+
+        public string DBPath { get; set; } = "data.db";
+
+        public string DbConnectionString => string.Format("DataSource={0}", DBPath);
+
+        public DataDBContext()
+        {
+
+        }
+        public void InitDataBase(string path)
+        {
+            DBPath = path;
+        }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (File.Exists(DBPath))
+                optionsBuilder.UseSqlite(DbConnectionString);
+            else
+                throw new($"資料表:{DBPath}不存在");
         }
     }
 }

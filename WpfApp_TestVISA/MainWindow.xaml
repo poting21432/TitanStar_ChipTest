@@ -6,7 +6,8 @@
         xmlns:local="clr-namespace:WpfApp_TestVISA" 
         xmlns:wpf="clr-namespace:Support.Wpf;assembly=Support" 
         mc:Ignorable="d" Background="{StaticResource SCB_ChartBackground_Medium}"
-        Title="立捷頻譜儀 讀寫測試工具" FontSize="25" Loaded="Window_Loaded" Height="1050">
+        Title="立捷頻譜儀 讀寫測試工具" FontSize="25" Loaded="Window_Loaded" Height="1050"
+        Width="1900">
     <Window.DataContext>
         <local:Model_Main/>
     </Window.DataContext>
@@ -96,7 +97,64 @@
                 </ItemsControl>
             </GroupBox>
         </StackPanel>
+        <StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <StackPanel Margin="10">
+                    <TextBlock Text="電表測試" FontSize="40"/>
+                    <Button Width="200" Content="切電表為低量程" Height="50" Margin="0 10" Command="{Binding Command_SetPowerMeter_Low}"/>
+                    <Button Width="200" Content="電表低量程量測" Height="50" Command="{Binding Command_TestPowerMeter_Low}"/>
+                    <Button Width="200" Content="切電表為高量程" Height="50" Margin="0 10" Command="{Binding Command_SetPowerMeter_High}"/>
+                    <Button Width="200" Content="電表高量程量測" Height="50" Command="{Binding  Command_TestPowerMeter_High}"/>
+
+                </StackPanel>
+                <StackPanel VerticalAlignment="Top">
+                    <TextBlock Text="手動燒錄" FontSize="40" Margin="0 10"/>
+                    <ComboBox ItemsSource="{Binding BurnTypes}" SelectedValue="{Binding SelectedBurnType}"/>
+                    <Button Width="200" Content="燒錄" Height="50" Margin="0 10" Command="{Binding Command_TestBurn}"/>
+                    <Button Width="200" Content="光敏測試" Height="50" Margin="0 10" Command="{Binding Command_PhotoresistTest}"/>
+                </StackPanel>
+            </StackPanel>
+            <DataGrid Margin="0 20" AutoGenerateColumns="False" FontSize="30" Style="{StaticResource StyleDataGrid_RowSelection}"
+                    IsReadOnly="True" ItemsSource="{Binding PLCAddrData}" Height="440" CanUserSortColumns="True" CanUserAddRows="False"
+                      SelectedItem="{Binding SelectedPLCAddr}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="ID" FontSize="20" Binding="{Binding Id}" Width="40"/>
+                    <DataGridTextColumn Header="名稱" FontSize="20" Binding="{Binding Title}" Width="150"/>
+                    <DataGridTextColumn Header="位置" FontSize="20" Binding="{Binding Address}" Width="50"/>
+                    <DataGridTextColumn Header="狀態" FontSize="20" Binding="{Binding Status}" Width="50">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Status}" Value="1">
+                                        <Setter Property="Foreground" Value="LightGreen"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Status}" Value="0">
+                                        <Setter Property="Foreground" Value="LightBlue"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTemplateColumn Header="設定" >
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="ON" Width="40" Margin="0 0 10 0" 
+                                            Command="{x:Static local:PLCData.CommandSetTrue}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Content="OFF" Width="40" 
+                                            Command="{x:Static local:PLCData.CommandSetFalse}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    
+                </DataGrid.Columns>
+            </DataGrid>
+        </StackPanel>
         
+       
     </StackPanel>
    
 </Window>

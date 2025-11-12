@@ -6,3 +6,4 @@ ef migrations remove
 dotnet ef database update --project .\Pyramid.Data.SQLite
 生成Entity Source
 Scaffold-DbContext "Data Source=data.db" Microsoft.EntityFrameworkCore.Sqlite -OutputDir Models
+Scaffold-DbContext "Data Source=configs.db" Microsoft.EntityFrameworkCore.Sqlite -OutputDir Configs

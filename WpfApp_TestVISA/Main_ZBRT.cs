@@ -22,13 +22,12 @@ namespace WpfApp_TestVISA
             ResetSteps();
             Instructions.Clear();
             NextStep(); //->"等待探針到位"
-            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, "D3001", (short)1, 0])
+            string memReady = "ZBRT_Signal_Ready".GetPLCMem();
+            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, "等待工件放置完畢 D3001 == 1"),
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1"),
                 OnEnd = (Ins) =>
                 {
-                    if (Ins.ExcResult == ExcResult.Success)
-                        SysLog.Add(LogLevel.Info, "確認工件放置完畢");
                 }
             });
             Instructions.Add(new(2, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, "M4051", (short)1, 2000])
@@ -88,7 +87,7 @@ namespace WpfApp_TestVISA
                 },
                 OnEnd = (Ins) => NextStep() //->"燒錄處理"
             });
-            Instructions.Add(new(6, "燒錄", Order.Custom)
+            Instructions.Add(new(6, "燒錄", Order.Custom, "PathBAT_ZBRT")
             {
                 OnStart = (Ins) =>
                 {
@@ -281,7 +280,7 @@ namespace WpfApp_TestVISA
                 {
                     NextStep();
                     SysLog.Add(LogLevel.Success, "產品作業完成 M4450 -> 1");
-                    Thread.Sleep(2000);
+                    Thread.Sleep(5000);
                 },
             });
             Task.Run(() =>
