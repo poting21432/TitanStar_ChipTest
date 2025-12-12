@@ -43,13 +43,17 @@ namespace WpfApp_TestVISA
         ];
         private string PathBatBurn = "";
 
-        bool IsBusy { get; set; } = false;
+        public bool IsBusy { get; set; } = false;
+        public bool IsBusyBurn { get; set; } = false;
         public ObservableCollection<string> AssignedTests { get; set; } = ["燒錄bat呼叫", "頻譜儀天線測試", "3V-uA電表測試", "5V-mA電表測試", "LED 閃爍計數檢測"];
 
         public ObservableCollection<string> VISA_Devices { get; set; } = [];
         public ObservableCollection<ProductRecord> ProductRecords { get; set; } = [];
         public string DeviceVISA { get; set; } = "";
+        public ObservableCollection<string> ProductTypes { get; set; } = ["G51", "ZBRT"];
+        public string SelectedProductType { get; set; } = "G51";
         public ObservableCollection<Instruction> Instructions { get; set; } = [];
+        public ObservableCollection<Instruction> InstructionsBurn { get; set; } = [];
         public ObservableCollection<StepData> StepsData { get; set; } = [];
         public Dictionary<int, StepData?> MapSteps { get; set; } = [];
         public IMessageBasedSession? Session { get; set; }
@@ -57,8 +61,10 @@ namespace WpfApp_TestVISA
         public ICommand Command_ConnectSwitch { get; set; }
         public ICommand Command_Write { get; set; }
         public ICommand Commnad_MainSequence { get; set; }
+        public ICommand Commnad_BurnSequence { get; set; }
         public ICommand Commnad_MainReset { get; set; }
-        public ICommand Commnad_NextStep { get; set; }
+        public ICommand Commnad_BurnReset { get; set; }
+        public ICommand Commnad_NextStepBurn { get; set; }
         public ICommand Command_SetPowerMeter_High { get; set; }
         public ICommand Command_SetPowerMeter_Low { get; set; }
         public ICommand Command_TestPowerMeter_Low { get; set; }
@@ -77,7 +83,9 @@ namespace WpfApp_TestVISA
         private bool IsConnected = false;
         MessageBasedFormattedIO? FormattedIO = null;
         public bool IsModeStep { get; set; } = false;
-        public bool SignalNext = false;
+        public bool IsModeStepBurn { get; set; } = false;
+        internal bool SignalNext = false;
+        internal bool SignalNextBurn = false;
         public Model_Main()
         {
             Task.Run(() =>
@@ -112,7 +120,11 @@ namespace WpfApp_TestVISA
                             using (Dispatcher.CurrentDispatcher.DisableProcessing())
                             {
                                 for(int i =0;i< PLCAddrData.Count; i++)
-                                    PLCAddrData[i].Status = result.ReturnValues[i];
+                                {
+                                    if (i < result.ReturnValues.Length)
+                                        PLCAddrData[i].Status = result.ReturnValues[i];
+                                }
+                                    
                             }
                         });
                     }
@@ -192,15 +204,29 @@ namespace WpfApp_TestVISA
 
             Commnad_MainSequence = new RelayCommand<object>((obj) =>
             {
-                ProcedureMain();
+                if(SelectedProductType == "G51")
+                    ProcedureMain_G51();
+                else if(SelectedProductType == "ZBRT")
+                    ProcedureMain_ZBRT();
+            });
+            Commnad_BurnSequence = new RelayCommand<object>((obj) =>
+            {
+                if (SelectedProductType == "G51")
+                    ProcedureBurn_G51();
+                else if(SelectedProductType == "ZBRT")
+                    ProcedureBurn_ZBRT();
             });
             Commnad_MainReset = new RelayCommand<object>((obj) =>
             {
                 Task.Run(()=> ProcedureReset());
             });
-            Commnad_NextStep = new RelayCommand<object>((obj) =>
+            Commnad_BurnReset = new RelayCommand<object>((obj) =>
             {
-                SignalNext = true;
+                Task.Run(() => ProcedureBurnReset());
+            });
+            Commnad_NextStepBurn = new RelayCommand<object>((obj) =>
+            {
+                SignalNextBurn = true;
             });
             Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
             {
@@ -326,14 +352,18 @@ namespace WpfApp_TestVISA
             });
         }
         bool IsReseting = false;
+        bool IsBurnReseting = false;
         public void ProcedureReset()
         {
             if (IsReseting)
                 return;
             IsReseting = true;
 
-            //燒錄
-            Global.PLC.WriteOneData("M3007", 0);
+            while(IsBusy)
+            {
+                SysLog.Add(LogLevel.Warning, "等待測試程序結束...");
+                Thread.Sleep(5000);
+            }
             //電路
             Global.PLC.WriteOneData("M3011", 0);//2.4V
             Global.PLC.WriteOneData("M3010", 0);
@@ -368,7 +398,33 @@ namespace WpfApp_TestVISA
             }
             IsReseting = false;
         }
-       
+        public void ProcedureBurnReset()
+        {
+            if (IsBurnReseting)
+                return;
+            IsBurnReseting = true;
+
+            while (IsBusyBurn)
+            {
+                SysLog.Add(LogLevel.Warning, "等待燒錄 程序結束...");
+                Thread.Sleep(5000);
+            }
+            if (Global.PLC.ReadOneData("M4010").ReturnValue != 0)
+            {
+                SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸在上定位");
+                Global.PLC.WriteOneData("M3020", 0);
+                Thread.Sleep(500);
+                SysLog.Add(LogLevel.Info, "燒錄升降汽缸下降 M3021 -> 1");
+                Global.PLC.WriteOneData("M3021", 1);
+                Thread.Sleep(1000);
+                while (Global.PLC.ReadOneData("M4011").ReturnValue == 0)
+                    Thread.Sleep(500);
+                SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸已在下定位 M4011 == 1");
+                Global.PLC.WriteOneData("M3021", 0);
+                SysLog.Add(LogLevel.Info, "燒錄升降汽缸下降復歸 M3021 -> 0");
+            }
+            IsBurnReseting = false;
+        }
         private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null)
         {
             /*

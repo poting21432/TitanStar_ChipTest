@@ -266,7 +266,7 @@ namespace WpfApp_TestVISA
                 SysLog.Add(LogLevel.Error, $"{BurnBAT} BAT路徑 {Global.CurrentBurnBATPath}");
                 return ExcResult.Error;
             }
-            ExcResult result = ExcResult.Error;
+            ExcResult result = ExcResult.Success;
             process.StartInfo.FileName = Global.CurrentBurnBATPath;
             process.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
             process.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出

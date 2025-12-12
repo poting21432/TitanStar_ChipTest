@@ -27,6 +27,7 @@ namespace WpfApp_TestVISA
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             SysLog.Add(LogLevel.Info, "程式啟動");
+            Global.MMain = DataContext as Model_Main;
             Global.Initialize();
         }
     }

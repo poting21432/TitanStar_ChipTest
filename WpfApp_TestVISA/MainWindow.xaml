@@ -55,12 +55,20 @@
         </StackPanel>
         <StackPanel>
             <StackPanel Orientation="Horizontal">
-                <Button Content="流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
-                <Button Content="復歸" Width="200" Margin="20 0" FontSize="30" Height="45" Command="{Binding Commnad_MainReset}"/>
+                <TextBlock Text="產品別" Margin="15 0"/>
+                <ComboBox ItemsSource="{Binding ProductTypes}" SelectedValue="{Binding SelectedProductType}" Width="200" Margin="20 0"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
-                <Button Content="步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Commnad_NextStep}"/>
-                <CheckBox Content="步進模式" IsChecked="{Binding IsModeStep}" Margin="10 0"/>
+                <Button Content="測試流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
+                <Button Content="測試復歸" Width="200" Margin="20 0" FontSize="30" Height="45" Command="{Binding Commnad_MainReset}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="燒錄流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_BurnSequence}"/>
+                <Button Content="燒錄復歸" Width="200" Margin="20 0" FontSize="30" Height="45" Command="{Binding Commnad_MainReset}"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <Button Content="步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Commnad_NextStepBurn}"/>
+                <CheckBox Content="步進模式" IsChecked="{Binding IsModeStepBurn}" Margin="10 0"/>
             </StackPanel>
             
             <StackPanel Visibility="Collapsed" Orientation="Horizontal" Margin="10">
@@ -81,7 +89,7 @@
                 <ItemsControl ItemsSource="{Binding StepsData}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="{x:Type wpf:StepData}">
-                            <StackPanel Orientation="Horizontal" Height="50" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Height="45" VerticalAlignment="Center">
                                 <wpf:UserControl_StatusIndicator FontSize="20" Width="25" Height="25" Status="{Binding DataContext.Status, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=ContentPresenter}}"
                         VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding Title}" FontSize="30" Foreground="{Binding ColorBrush}" Margin="5" Width="300"/>

@@ -34,8 +34,10 @@ namespace WpfApp_TestVISA
 
         public static bool IsInitialized = false;
 
+        public static Model_Main? MMain { get; set; } = null;
         public static void Initialize()
         {
+
             Task.Run(() =>
             {
                 InitializeConfig();
@@ -43,8 +45,8 @@ namespace WpfApp_TestVISA
                 {
                     "PLC連線".TryCatch(() =>
                     {
+                        PLCStationID = Configs["PLCStationID"].Value.ToInt(0);
                         SysLog.Add(LogLevel.Info, $"PLC {PLCStationID} 連線中...");
-                        PLCStationID = Configs["PLCStationID"].ToInt(0);
                         var result = PLC.Open(PLCStationID, "");
                         if (result.IsSuccess)
                             SysLog.Add(LogLevel.Info, $"PLC {PLCStationID} 已連線: {result.ReturnCode}");
@@ -66,7 +68,34 @@ namespace WpfApp_TestVISA
                     SysLog.Add(LogLevel.Info, $"{path.Title}:{path.Value}");
                 IsInitialized = true;
             });
-           
+            Task.Run(() =>
+            {
+                while (!IsInitialized)
+                    Thread.Sleep(1000);
+                while (true)
+                {
+                    Thread.Sleep(1000);
+                    "產品檢測".TryCatch(() =>
+                    {
+                        short productType = PLC.ReadOneData("D3101").ReturnValue;
+                        Model_Main.DispMain?.Invoke(() =>
+                        {
+                            if (MMain == null)
+                                return;
+                            if (productType == 1 && MMain!.SelectedProductType !="G51")
+                            {
+                                SysLog.Add(LogLevel.Warning, "PLC產品切換為G51");
+                                MMain.SelectedProductType = "G51";
+                            }
+                            if (productType == 2 && MMain!.SelectedProductType != "ZBRT")
+                            {
+                                SysLog.Add(LogLevel.Warning, "PLC產品切換為ZBRT");
+                                MMain.SelectedProductType = "ZBRT";
+                            }
+                        });
+                    });
+                }
+            });
         }
         static void InitializeConfig()
         {
