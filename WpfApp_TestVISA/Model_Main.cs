@@ -287,7 +287,7 @@ namespace WpfApp_TestVISA
             {
                 Instruction ins =(new(6, "燒錄", Order.Burn, SelectedBurnType) {
                 });
-                ins.Execute();
+                Task.Run(() => ins.Execute());
             });
             Command_PhotoresistTest = new RelayCommand<object>((obj) =>
             {

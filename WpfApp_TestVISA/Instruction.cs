@@ -247,8 +247,9 @@ namespace WpfApp_TestVISA
         }
         private ExcResult BurnSequence()
         {
-            Thread.Sleep(5000);
-            return ExcResult.Success;
+            SysLog.Add(LogLevel.Info, "燒錄中");
+            //Thread.Sleep(5000);
+            //return ExcResult.Success;
             if (Parameters.Length != 1)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
             string BurnBAT = Parameters[0]?.ToString() ?? "";
@@ -265,6 +266,7 @@ namespace WpfApp_TestVISA
                 SysLog.Add(LogLevel.Error, $"{BurnBAT} BAT路徑 {Global.CurrentBurnBATPath}");
                 return ExcResult.Error;
             }
+            ExcResult result = ExcResult.Error;
             process.StartInfo.FileName = Global.CurrentBurnBATPath;
             process.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
             process.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出
@@ -277,28 +279,42 @@ namespace WpfApp_TestVISA
             process.OutputDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
+                {
                     stdOutput += e.Data + Environment.NewLine;
+                    if (e.Data.Contains("ERROR"))
+                        SysLog.Add(LogLevel.Error, $"{e.Data}");
+                    else if (!string.IsNullOrWhiteSpace(e.Data))
+                        SysLog.Add(LogLevel.Info, $"{e.Data}");
+                }
             };
-
             process.ErrorDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
+                {
                     stdError += e.Data + Environment.NewLine;
+                    if (!string.IsNullOrWhiteSpace(e.Data))
+                        SysLog.Add(LogLevel.Error, $"{e.Data}");
+                }
             };
 
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
-            process.WaitForExit(); // 等待執行完成
-
+            bool isComplete = process.WaitForExit(30000); // 等待執行完成
             string output = stdOutput;
             string error = stdError;
-            if (output.Contains("ERROR") || error.Contains("ERROR"))
-                return ExcResult.Error;
-            if (output.Contains("Flashing completed successfully!") &&
-                output.Contains("DONE"))
-                return ExcResult.Success;
-            return ExcResult.Error;
+            if (!isComplete)
+            {
+                SysLog.Add(LogLevel.Error, "燒錄超時:30s");
+                result = ExcResult.TimeOut;
+            }
+            else if (output.Contains("ERROR") || error.Contains("ERROR"))
+            {
+                SysLog.Add(LogLevel.Error, "燒錄失敗");
+                result = ExcResult.Error;
+            }
+            else SysLog.Add(LogLevel.Success, "燒錄完成");
+            return result;
         }
 
         private static float ConvertFloatFromRegisters(ushort[] regs)
