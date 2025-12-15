@@ -31,12 +31,11 @@ namespace WpfApp_TestVISA
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
 
-
+        internal bool IsStop { get; set; } = false;
         public int CurrentStepID = 0;
 
         public static readonly string[] StrSteps = [
-            "等待探針到位", "燒錄處理", "等待電測程序",
-            "3V,uA 電表測試", "等待電表汽缸上升", "3V導通 LED閃爍檢測",
+            "等待探針到位","3V,uA 電表測試", "等待電表汽缸上升", "3V導通 LED閃爍檢測",
             "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
             "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
             "測試開關 - LED檢測", "頻譜儀天線強度測試", "完成並記錄資訊"
@@ -86,8 +85,15 @@ namespace WpfApp_TestVISA
         public bool IsModeStepBurn { get; set; } = false;
         internal bool SignalNext = false;
         internal bool SignalNextBurn = false;
+
+        public bool IsManualMode { get; set; } = false;
         public Model_Main()
         {
+            //Auto Control
+            Task.Run(() =>
+            {
+
+            });
             Task.Run(() =>
             {
                 while (!Global.IsInitialized)
@@ -435,7 +441,7 @@ namespace WpfApp_TestVISA
             });
             return;
             */
-            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, 10000])
+            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, 5000])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 {Count}次: M4003 ^v {Count}"),
                 OnEnd = (Ins) =>

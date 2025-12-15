@@ -57,6 +57,12 @@
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="產品別" Margin="15 0"/>
                 <ComboBox ItemsSource="{Binding ProductTypes}" SelectedValue="{Binding SelectedProductType}" Width="200" Margin="20 0"/>
+                <TextBlock Text="手動" Margin="15 0"/>
+                <CheckBox IsChecked="{Binding IsManualMode}" Margin="0 10">
+                    <CheckBox.LayoutTransform>
+                        <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                    </CheckBox.LayoutTransform>
+                </CheckBox>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <Button Content="測試流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
@@ -123,8 +129,8 @@
                 </StackPanel>
             </StackPanel>
             <DataGrid Margin="0 20" AutoGenerateColumns="False" FontSize="30" Style="{StaticResource StyleDataGrid_RowSelection}"
-                    IsReadOnly="True" ItemsSource="{Binding PLCAddrData}" Height="440" CanUserSortColumns="True" CanUserAddRows="False"
-                      SelectedItem="{Binding SelectedPLCAddr}">
+                    IsReadOnly="True" ItemsSource="{Binding PLCAddrData}" Height="660" CanUserSortColumns="True" CanUserAddRows="False"
+                      SelectedItem="{Binding SelectedPLCAddr}" >
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="ID" FontSize="20" Binding="{Binding Id}" Width="40"/>
                     <DataGridTextColumn Header="名稱" FontSize="20" Binding="{Binding Title}" Width="150"/>

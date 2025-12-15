@@ -473,7 +473,7 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) =>
                 {
                     NextStep();  //"頻譜儀天線強度測試"
-                    DispMain?.Invoke(() => CurrentProduct!.TestAntenna = "~");
+                    //DispMain?.Invoke(() => CurrentProduct!.TestAntenna = "~");
                     SysLog.Add(LogLevel.Warning, "略過頻譜儀天線強度測試程序");
                     Thread.Sleep(2000);
                 },
@@ -485,10 +485,22 @@ namespace WpfApp_TestVISA
                 OnEnd = (Ins) =>
                 {
                     NextStep();
-                    SysLog.Add(LogLevel.Success, $"產品作業完成 {mem_result} -> 1");
+                    SysLog.Add(LogLevel.Success, $"產品作業完成 {mem_result} -> 2");
                     Thread.Sleep(5000);
                 },
             });
+
+            Instructions.Add(new(11, $"斷開3V+(探針) {v3_prb}->0", Order.SendPLCSignal, [Global.PLC, v3_prb, (short)0])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"斷開3V+ {v3_prb}->0"),
+                OnEnd = (Ins) => Thread.Sleep(500)
+            });
+            Instructions.Add(new(11, $"斷開3V- {v3_neg}->0", Order.SendPLCSignal, [Global.PLC, v3_neg, (short)0])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"斷開3V- {v3_neg}->0"),
+                OnEnd = (Ins) => Thread.Sleep(1000)
+            });
+
             //M3013 -> 1 升降汽缸下降
             //M4001 -> 1 確認下定位
             //M3013 -> 0 復歸
@@ -537,14 +549,14 @@ namespace WpfApp_TestVISA
             });
             Task.Run(() =>
             {
-                "流程".TryCatch(() =>
+                SignalNext = false;
+                if (IsModeStep)
+                    SysLog.Add(LogLevel.Warning, "步進模式");
+                foreach (Instruction ins in Instructions)
                 {
-                    SignalNext = false;
-                    if (IsModeStep)
-                        SysLog.Add(LogLevel.Warning, "步進模式");
-                    foreach (Instruction ins in Instructions)
+                    "流程".TryCatch(() =>
                     {
-                        if(IsReseting)
+                        if (IsReseting || IsStop)
                         {
                             SignalNext = false;
                             IsBusy = false;
@@ -561,15 +573,14 @@ namespace WpfApp_TestVISA
                         string title = ins.Title;
                         ins?.Execute();
                         SignalNext = false;
-                        if (ins != null && ins.ExcResult != ExcResult.Success)
-                            return;
-                    }
-                }, () =>
-                {
-                    ResetSteps();
-                    SignalNext = false;
-                    IsBusy = false;
-                });
+                        //if (ins != null && ins.ExcResult != ExcResult.Success)
+                        //    return;
+                    });
+                }
+                ResetSteps();
+                SignalNext = false;
+                IsBusy = false;
+                IsStop = false;
             });
         }
         public void ProcedureBurn_G51()
@@ -751,6 +762,7 @@ namespace WpfApp_TestVISA
                     //ResetSteps();
                     SignalNextBurn = false;
                     IsBusyBurn = false;
+                    IsStop = false;
                 });
             });
         }
