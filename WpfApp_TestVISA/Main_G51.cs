@@ -11,6 +11,12 @@ namespace WpfApp_TestVISA
 {
     public partial class Model_Main
     {
+        internal static readonly string[] StrSteps_G51 = [
+            "等待產品到位","3V,uA 電表測試", "等待電表汽缸上升", "3V導通 LED閃爍檢測",
+            "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
+            "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
+            "測試開關 - LED檢測", "頻譜儀天線強度測試", "完成並記錄資訊"
+        ];
         public void ProcedureMain_G51()
         {
             if (IsBusy)
@@ -21,7 +27,7 @@ namespace WpfApp_TestVISA
             IsBusy = true;
             ResetSteps();
             Instructions.Clear();
-            NextStep(); //->"等待探針到位"
+            NextStep(); //->"等待到位"
 
             string memReady = "G51_Signal_Ready".GetPLCMem();
             Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
@@ -486,7 +492,7 @@ namespace WpfApp_TestVISA
                 {
                     NextStep();
                     SysLog.Add(LogLevel.Success, $"產品作業完成 {mem_result} -> 2");
-                    Thread.Sleep(5000);
+                    Thread.Sleep(2000);
                 },
             });
 
@@ -544,7 +550,7 @@ namespace WpfApp_TestVISA
                         Global.PLC.WriteOneData(cyl_UD_DN, 0);
                         SysLog.Add(LogLevel.Info, $"升降汽缸下降復歸 {cyl_UD_DN} -> 0");
                     }
-
+                    NextStep();
                 }
             });
             Task.Run(() =>
@@ -577,7 +583,6 @@ namespace WpfApp_TestVISA
                         //    return;
                     });
                 }
-                ResetSteps();
                 SignalNext = false;
                 IsBusy = false;
                 IsStop = false;

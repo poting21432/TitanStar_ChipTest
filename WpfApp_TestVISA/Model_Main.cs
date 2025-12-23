@@ -34,12 +34,6 @@ namespace WpfApp_TestVISA
         internal bool IsStop { get; set; } = false;
         public int CurrentStepID = 0;
 
-        public static readonly string[] StrSteps = [
-            "等待探針到位","3V,uA 電表測試", "等待電表汽缸上升", "3V導通 LED閃爍檢測",
-            "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
-            "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
-            "測試開關 - LED檢測", "頻譜儀天線強度測試", "完成並記錄資訊"
-        ];
         private string PathBatBurn = "";
 
         public bool IsBusy { get; set; } = false;
@@ -50,7 +44,20 @@ namespace WpfApp_TestVISA
         public ObservableCollection<ProductRecord> ProductRecords { get; set; } = [];
         public string DeviceVISA { get; set; } = "";
         public ObservableCollection<string> ProductTypes { get; set; } = ["G51", "ZBRT"];
-        public string SelectedProductType { get; set; } = "G51";
+        private string selectedProductType = "G51";
+        public string SelectedProductType
+        {
+            get => selectedProductType;
+            set
+            {
+                selectedProductType = value;
+                if(value == "G51")
+                    InitSteps(StrSteps_G51);
+                else if(value =="ZBRT")
+                    InitSteps(StrSteps_ZBRT);
+
+            }
+        }
         public ObservableCollection<Instruction> Instructions { get; set; } = [];
         public ObservableCollection<Instruction> InstructionsBurn { get; set; } = [];
         public ObservableCollection<StepData> StepsData { get; set; } = [];
@@ -89,11 +96,6 @@ namespace WpfApp_TestVISA
         public bool IsManualMode { get; set; } = false;
         public Model_Main()
         {
-            //Auto Control
-            Task.Run(() =>
-            {
-
-            });
             Task.Run(() =>
             {
                 while (!Global.IsInitialized)
@@ -343,14 +345,7 @@ namespace WpfApp_TestVISA
                     ins.Execute();
                 });
             });
-            int sid = 1;
-            foreach (var step in StrSteps)
-            {
-                StepData stepData = new() { ID = sid, ColorBrush = Brushes.LightBlue, Title = step };
-                StepsData.Add(stepData);
-                MapSteps.Add(sid, stepData);
-                sid++;
-            }
+            InitSteps(StrSteps_G51);
             Task.Run(() =>
             {
                 Thread.Sleep(1000);
@@ -466,20 +461,37 @@ namespace WpfApp_TestVISA
                 CurrentStepID++;
                 if (CurrentStepID < 0)
                     CurrentStepID = 0;
-                if (CurrentStepID < StepsData.Count)
+                if (CurrentStepID <= StepsData.Count)
                 {
                     MapSteps.TryGetValue(CurrentStepID, out step);
                     step?.SetStart();
                 }
             });
         }
-        public void ResetSteps()
+        internal void ResetSteps()
         {
             DispMain?.Invoke(() =>
             {
                 CurrentStepID = 0;
                 foreach (var step in StepsData)
                     step.Reset();
+            });
+        }
+        internal void InitSteps(string[] StrSteps)
+        {
+            DispMain?.Invoke(() =>
+            {
+                StepsData.Clear();
+                MapSteps.Clear();
+                int sid = 1;
+                foreach (var step in StrSteps)
+                {
+                    StepData stepData = new() { ID = sid, ColorBrush = Brushes.LightBlue, Title = step };
+                    StepsData.Add(stepData);
+                    MapSteps.Add(sid, stepData);
+                    sid++;
+                }
+                ResetSteps();
             });
         }
     }

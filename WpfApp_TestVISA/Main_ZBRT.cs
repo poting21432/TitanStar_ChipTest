@@ -11,6 +11,11 @@ namespace WpfApp_TestVISA
 {
     public partial class Model_Main
     {
+        internal static readonly string[] StrSteps_ZBRT = [
+            "等待產品到位","3V導通LED檢測", "蓋開LED檢測", "5V導通LED檢測",
+            "低電壓LED檢測", "測試開關 - LED檢測", "頻譜儀天線強度測試", 
+            "完成並記錄資訊"
+        ];
         public void ProcedureMain_ZBRT()
         {
             if (IsBusy)
@@ -81,7 +86,7 @@ namespace WpfApp_TestVISA
             Instructions.Add(new(13, "登錄開關汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)1])
             {
                 OnStart = (Ins) => {
-                    NextStep();//->"等待電表汽缸上升"
+                    NextStep();
                     SysLog.Add(LogLevel.Info, $"登錄開關汽缸下降 {mem_switch} -> 1");
                 },
                 OnEnd = (Ins) => Thread.Sleep(2000)
@@ -97,7 +102,6 @@ namespace WpfApp_TestVISA
             Instructions.Add(new(14, "導通3V-", Order.SendPLCSignal, [Global.PLC, mem_3Vneg, (short)1])
             {
                 OnStart = (Ins) => {
-                    NextStep();//->"3V導通 LED閃爍檢測"
                     SysLog.Add(LogLevel.Info, $"導通3V- {mem_3Vneg}->1");
                 }
             });
@@ -113,7 +117,7 @@ namespace WpfApp_TestVISA
             Instructions.Add(new(29, "蓋開升降汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_cover, (short)1])
             {
                 OnStart = (Ins) => {
-                    NextStep(); //-> "蓋開 - LED檢測"
+                    NextStep();
                     SysLog.Add(LogLevel.Info, $"蓋開升降汽缸下降 {mem_cover} -> 1");
                 },
             });
@@ -130,6 +134,7 @@ namespace WpfApp_TestVISA
             {
                 OnStart = (Ins) =>
                 {
+                    NextStep();
                     Thread.Sleep(2000);
                     SysLog.Add(LogLevel.Info, $"導通5V+ {mem_5Vpos}->1");
                 },
@@ -170,11 +175,13 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) =>
                 {
                     SysLog.Add(LogLevel.Info, "長亮檢查");
-                    //while (Global.PLC.ReadOneData(photoresistor).ReturnValue == 0)
-                    //    Thread.Sleep(100);
-                    //Thread.Sleep(1000);
-                    //if (Global.PLC.ReadOneData(photoresistor).ReturnValue == 1)
-                    //    return;
+                    /*
+                    while (Global.PLC.ReadOneData(photoresistor).ReturnValue == 0)
+                        Thread.Sleep(100);
+                    Thread.Sleep(1000);
+                    if (Global.PLC.ReadOneData(photoresistor).ReturnValue == 1)
+                        return;
+                    */
                     Thread.Sleep(5000);
                 }
             });
@@ -187,7 +194,7 @@ namespace WpfApp_TestVISA
             {
                 OnStart = (Ins) =>
                 {
-                    NextStep(); //->"2.4V LED閃爍檢測"
+                    NextStep(); //->"測試開關LED檢測"
                     SysLog.Add(LogLevel.Info, $"測試開關汽缸下降 {mem_switch}-> 1");
                 }
             });
@@ -443,7 +450,7 @@ namespace WpfApp_TestVISA
                         Global.PLC.WriteOneData(cyl_UD_DN, 0);
                         SysLog.Add(LogLevel.Info, $"燒錄升降下降復歸 {cyl_UD_DN} -> 0");
                     }
-
+                    NextStep();
                 }
             });
             Task.Run(() =>
