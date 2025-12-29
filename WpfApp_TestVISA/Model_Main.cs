@@ -38,14 +38,15 @@ namespace WpfApp_TestVISA
 
         public bool IsBusy { get; set; } = false;
         public bool IsBusyBurn { get; set; } = false;
+        public int BurnRetryT { get; set; } = 3;
         public ObservableCollection<string> AssignedTests { get; set; } = ["燒錄bat呼叫", "頻譜儀天線測試", "3V-uA電表測試", "5V-mA電表測試", "LED 閃爍計數檢測"];
 
         public ObservableCollection<string> VISA_Devices { get; set; } = [];
         public ObservableCollection<ProductRecord> ProductRecords { get; set; } = [];
         public string DeviceVISA { get; set; } = "";
         public ObservableCollection<string> ProductTypes { get; set; } = ["G51", "ZBRT"];
-        private string selectedProductType = "G51";
-        public string SelectedProductType
+        private string? selectedProductType = "";
+        public string? SelectedProductType
         {
             get => selectedProductType;
             set
@@ -68,6 +69,10 @@ namespace WpfApp_TestVISA
         public ICommand Command_Write { get; set; }
         public ICommand Commnad_MainSequence { get; set; }
         public ICommand Commnad_BurnSequence { get; set; }
+        public ICommand Command_Test1 { get; set; }
+        public ICommand Command_Test2 { get; set; }
+        public ICommand Command_Test3 { get; set; }
+        public ICommand Command_Test4 { get; set; }
         public ICommand Commnad_MainReset { get; set; }
         public ICommand Commnad_BurnReset { get; set; }
         public ICommand Commnad_NextStepBurn { get; set; }
@@ -89,13 +94,45 @@ namespace WpfApp_TestVISA
         private bool IsConnected = false;
         MessageBasedFormattedIO? FormattedIO = null;
         public bool IsModeStep { get; set; } = false;
-        public bool IsModeStepBurn { get; set; } = false;
         internal bool SignalNext = false;
-        internal bool SignalNextBurn = false;
 
-        public bool IsManualMode { get; set; } = false;
+        public bool IsManualMode { get; set; } = true;
         public Model_Main()
         {
+            Task.Run(() =>
+            {
+                while (!Global.IsInitialized)
+                    Thread.Sleep(500);
+                string memReady_G51 = "G51_Signal_Ready".GetPLCMem();
+                string memReady_ZBRT = "ZBRT_Signal_Ready".GetPLCMem();
+                string memReady_BG51= "G51_Burn_Ready".GetPLCMem();
+                string memReady_BZBRT = "ZBRT_Burn_Ready".GetPLCMem();
+                while (true)
+                {
+                    Thread.Sleep(500);
+                    if (IsManualMode)
+                        continue;
+                    if(SelectedProductType == "G51")
+                    {
+                        short value_BG51 = Global.PLC.ReadOneData(memReady_BG51).ReturnValue;
+                        short value_G51 = Global.PLC.ReadOneData(memReady_G51).ReturnValue;
+                        
+                        if (value_BG51 == 1 && !IsBusyBurn)
+                            ProcedureBurn_G51();
+                        else if (value_G51 == 1 && !IsBusy)
+                            ProcedureMain_G51();
+                    }
+                    else if(SelectedProductType == "ZBRT")
+                    {
+                        short value_BZBRT = Global.PLC.ReadOneData(memReady_BZBRT).ReturnValue;
+                        short value_ZBRT = Global.PLC.ReadOneData(memReady_ZBRT).ReturnValue;
+                        if (value_BZBRT == 1 && !IsBusyBurn)
+                            ProcedureBurn_ZBRT();
+                        else if (value_ZBRT == 1 && !IsBusy)
+                            ProcedureMain_ZBRT();
+                    }
+                }
+            });
             Task.Run(() =>
             {
                 while (!Global.IsInitialized)
@@ -234,7 +271,7 @@ namespace WpfApp_TestVISA
             });
             Commnad_NextStepBurn = new RelayCommand<object>((obj) =>
             {
-                SignalNextBurn = true;
+                SignalNext = true;
             });
             Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
             {
@@ -267,18 +304,18 @@ namespace WpfApp_TestVISA
                     }
                 };
                 ins1.Execute();
-                if (ins1.ExcResult == ExcResult.Error)
+                if (ins1.ExcResult != ExcResult.Success)
                     return;
-                Instruction ins2 =(new(2, "讀電表值(低量程)", Order.ReadModbusFloat, [(ushort)0x30])
+                Instruction ins2 =(new(2, "讀電表值(低量程)", Order.ReadModbusFloat, [(ushort)0x0032])
                 {
-                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取低量程電表數值:(0x30)"),
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取低量程電表數值:(0x32)"),
                     OnEnd = (Ins) =>
                     {
                         float? uA = Ins.Result as float?;
                         if (!uA.HasValue)
                             Ins.ExcResult = ExcResult.Error;
                         if (Ins.ExcResult == ExcResult.Success)
-                            SysLog.Add(LogLevel.Info, $"讀取電表數值(低量程):{Ins.Result}");
+                            SysLog.Add(LogLevel.Info, $"讀取電表數值(低量程):{Ins.Result}uA");
                         else
                             SysLog.Add(LogLevel.Error, "電表數值異常");
                     }
@@ -299,18 +336,18 @@ namespace WpfApp_TestVISA
                     }
                 });
                 ins1.Execute();
-                if (ins1.ExcResult == ExcResult.Error)
+                if (ins1.ExcResult != ExcResult.Success)
                     return;
-                Instruction ins2 = (new(1, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x32])
+                Instruction ins2 = (new(1, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x0030])
                 {
-                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x32)"),
+                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x30)"),
                     OnEnd = (Ins) =>
                     {
                         float? uA = Ins.Result as float?;
                         if (!uA.HasValue)
                             Ins.ExcResult = ExcResult.Error;
                         if (Ins.ExcResult == ExcResult.Success)
-                            SysLog.Add(LogLevel.Info, $"讀取電表數值(高量程):{Ins.Result}");
+                            SysLog.Add(LogLevel.Info, $"讀取電表數值(高量程):{Ins.Result}mA");
                         else
                             SysLog.Add(LogLevel.Error, "電表數值異常");
                     }
@@ -344,6 +381,34 @@ namespace WpfApp_TestVISA
                     };
                     ins.Execute();
                 });
+            });
+            Command_Test1 = new RelayCommand<object>((obj) =>
+            {
+                string v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
+                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
+                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
+                Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
+            }); 
+            Command_Test2 = new RelayCommand<object>((obj) =>
+            {
+                string v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
+                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
+                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
+                Global.PLC.WriteRandomData([v3_pos, v3_neg], [0, 0]);
+            });
+
+            Command_Test3 = new RelayCommand<object>((obj) =>
+            {
+                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
+                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
+                Global.PLC.WriteRandomData([v3_prb, v3_neg], [1, 1]);
+            });
+
+            Command_Test4 = new RelayCommand<object>((obj) =>
+            {
+                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
+                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
+                Global.PLC.WriteRandomData([v3_prb, v3_neg], [0, 0]);
             });
             InitSteps(StrSteps_G51);
             Task.Run(() =>
@@ -426,7 +491,7 @@ namespace WpfApp_TestVISA
             }
             IsBurnReseting = false;
         }
-        private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null)
+        private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null, int timeOut = 5000)
         {
             /*
             Instructions.Add(new(ID, $"閃爍檢測{Count}次-Bypass", Order.Custom)
@@ -435,8 +500,8 @@ namespace WpfApp_TestVISA
                 OnEnd = (ins) => SysLog.Add(LogLevel.Info, "閃爍檢測{Count}次-Bypass")
             });
             return;
-            */
-            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, 5000])
+            //*/
+            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, timeOut])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 {Count}次: M4003 ^v {Count}"),
                 OnEnd = (Ins) =>
@@ -528,8 +593,16 @@ namespace WpfApp_TestVISA
     public class PLCData : PLCAddr
     {
         public short? Status { get; set; }
-        public static ICommand CommandSetTrue { get; set; } = new RelayCommand<PLCData>((data) => SetValue(data.Address, 1));
-        public static ICommand CommandSetFalse { get; set; } = new RelayCommand<PLCData>((data) => SetValue(data.Address, 0));
+        public static ICommand CommandSetTrue { get; set; } = new RelayCommand<PLCData>((data) =>
+        {
+            SysLog.Add(LogLevel.Warning, $"手動控制{data.Title}{data.Address} -> 1");
+            SetValue(data.Address, 1); 
+        });
+        public static ICommand CommandSetFalse { get; set; } = new RelayCommand<PLCData>((data) =>
+        {
+            SysLog.Add(LogLevel.Warning, $"手動控制{data.Title}{data.Address} -> 0");
+            SetValue(data.Address, 0); 
+        });
         public PLCData()
         {
         }

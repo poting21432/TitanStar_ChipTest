@@ -68,6 +68,7 @@ namespace WpfApp_TestVISA
                     SysLog.Add(LogLevel.Info, $"{path.Title}:{path.Value}");
                 IsInitialized = true;
             });
+            //*
             Task.Run(() =>
             {
                 while (!IsInitialized)
@@ -95,7 +96,7 @@ namespace WpfApp_TestVISA
                         });
                     });
                 }
-            });
+            });//*/
         }
         static void InitializeConfig()
         {

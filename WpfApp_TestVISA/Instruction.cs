@@ -275,7 +275,7 @@ namespace WpfApp_TestVISA
 
             string stdOutput = "";
             string stdError = "";
-
+            
             process.OutputDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
@@ -320,10 +320,10 @@ namespace WpfApp_TestVISA
         private static float ConvertFloatFromRegisters(ushort[] regs)
         {
             byte[] bytes = new byte[4];
-            bytes[0] = (byte)(regs[0] >> 8);
-            bytes[1] = (byte)(regs[0] & 0xFF);
-            bytes[3] = (byte)(regs[1] >> 8);
-            bytes[2] = (byte)(regs[1] & 0xFF);
+            bytes[3] = (byte)(regs[0] >> 8);
+            bytes[2] = (byte)(regs[0] & 0xFF);
+            bytes[0] = (byte)(regs[1] >> 8);
+            bytes[1] = (byte)(regs[1] & 0xFF);
             return BitConverter.ToSingle(bytes, 0);
         }
     }

@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Include>
+  <Var name="RegenerateDebugInfo" value="false" />
+  <Var name="MarkedOnly" value="false" />
+  <Var name="RenameProperties" value="true" />
+  <Var name="RenameEvents" value="true" />
+  <Var name="RenameFields" value="true" />
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="ReuseNames" value="false" />
+  <Var name="HideStrings" value="true" />
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+  <Var name="AnalyzeXaml" value="true" />
+  <Var name="UseUnicodeNames" value="false" />
+  <Var name="UseKoreanNames" value="true" />
+  <Module file="$(InPath)\DeviceDB.dll">
+    <SkipType name="*AnonymousType*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" skipStringHiding="true" />
+  </Module>
+  <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.20\ref\net8.0\" />
+  <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.WindowsDesktop.App.Ref\8.0.20\ref\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.data.sqlite.core\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.entityframeworkcore.abstractions\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.entityframeworkcore.relational\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.entityframeworkcore.sqlite.core\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.entityframeworkcore\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.caching.abstractions\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.caching.memory\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.configuration.abstractions\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.dependencyinjection.abstractions\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.dependencyinjection\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.dependencymodel\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.logging.abstractions\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.logging\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.options\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\microsoft.extensions.primitives\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\sqlitepclraw.bundle_e_sqlite3\2.1.10\lib\netstandard2.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\sqlitepclraw.core\2.1.10\lib\netstandard2.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\sqlitepclraw.provider.e_sqlite3\2.1.10\lib\net6.0-windows7.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\system.diagnostics.diagnosticsource\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\system.io.pipelines\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\system.text.encodings.web\9.0.8\lib\net8.0\" />
+  <AssemblySearchPath path="C:\Users\user\.nuget\packages\system.text.json\9.0.8\lib\net8.0\" />
+</Include>

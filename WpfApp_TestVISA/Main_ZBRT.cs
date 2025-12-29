@@ -27,6 +27,12 @@ namespace WpfApp_TestVISA
             ResetSteps();
             Instructions.Clear();
             NextStep(); //->"等待探針到位"
+
+            DispMain?.Invoke(() =>
+            {
+                CurrentProduct = new() { TimeStart = DateTime.Now };
+            });
+
             string memReady = "ZBRT_Signal_Ready".GetPLCMem();
             Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
@@ -82,7 +88,7 @@ namespace WpfApp_TestVISA
 
                 }
             });
-            string mem_switch = "ZBRT_Cylinder_SwitchTest".GetPLCMem();//M3050
+            string mem_switch = "ZBRT_Cylinder_SwitchTest".GetPLCMem();//M3053
             Instructions.Add(new(13, "登錄開關汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)1])
             {
                 OnStart = (Ins) => {
@@ -91,27 +97,70 @@ namespace WpfApp_TestVISA
                 },
                 OnEnd = (Ins) => Thread.Sleep(2000)
             });
+            string mem_5Vpos = "ZBRT_Supply_5V+".GetPLCMem();//M3051
+            string mem_5Vneg = "ZBRT_Supply_5V-".GetPLCMem();//M3052
+            Instructions.Add(new(33, "導通5V+", Order.SendPLCSignal, [Global.PLC, mem_5Vpos, (short)1])
+            {
+                OnStart = (Ins) =>
+                {
+                    NextStep();
+                    SysLog.Add(LogLevel.Info, $"導通5V+ {mem_5Vpos}->1");
+                },
+                OnEnd = (Ins) => Thread.Sleep(100)
+            });
+            Instructions.Add(new(33, "導通5V-", Order.SendPLCSignal, [Global.PLC, mem_5Vneg, (short)1])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"導通5V- {mem_5Vneg}->1"),
+                OnEnd = (Ins) => Thread.Sleep(100)
+            });
             string mem_3Vpos = "ZBRT_Supply_3V+".GetPLCMem();//M3055
             Instructions.Add(new(14, "導通3V+", Order.SendPLCSignal, [Global.PLC, mem_3Vpos, (short)1])
             {
-                OnStart = (Ins) => {
-                    SysLog.Add(LogLevel.Info, $"導通3V+ {mem_3Vpos}->1");
-                }
+                OnStart = (Ins) =>  SysLog.Add(LogLevel.Info, $"導通3V+ {mem_3Vpos}->1"),
+                OnEnd = (Ins) => Thread.Sleep(100)
             });
             string mem_3Vneg = "ZBRT_Supply_3V-".GetPLCMem();//M3056
             Instructions.Add(new(14, "導通3V-", Order.SendPLCSignal, [Global.PLC, mem_3Vneg, (short)1])
             {
-                OnStart = (Ins) => {
-                    SysLog.Add(LogLevel.Info, $"導通3V- {mem_3Vneg}->1");
-                }
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"導通3V- {mem_3Vneg}->1"),
+                OnEnd = (Ins) => Thread.Sleep(100)
             });
+
             string photoresistor = "ZBRT_Sensor_Photoresistor".GetPLCMem();//M4052
-            AddSigCount(15, photoresistor, 4, () => DispMain?.Invoke(() => CurrentProduct!.OnCheck = "V"));
+            AddSigCount(15, photoresistor, 4, null, 10000);//, () => DispMain?.Invoke(() => CurrentProduct!.OnCheck = "V"));
             
+            Instruction ins_check2 = new(41, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1"),
+                OnEnd = (Ins) =>
+                {
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else
+                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
+                }
+            };
+
             Instructions.Add(new(16, "登錄開關汽缸上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"登錄開關汽缸上升 {mem_switch} -> 0"),
-                OnEnd = (Ins) => Thread.Sleep(2000)
+                OnStart = (Ins) => {
+                    Task.Run(() => {
+                        ins_check2.Execute();
+                    });
+                    SysLog.Add(LogLevel.Info, $"登錄開關汽缸上升 {mem_switch} -> 0");
+                },
+                OnEnd =(Ins) =>
+                {
+                    while (ins_check2.ExcResult != ExcResult.Success)
+                    {
+                        if (ins_check2.ExcResult == ExcResult.TimeOut)
+                        {
+                            Ins.ExcResult = ExcResult.Error;
+                            return;
+                        }
+                        Thread.Sleep(200);
+                    }
+                }
             });
             string mem_cover = "ZBRT_Cylinder_Cover".GetPLCMem();//M3053
             Instructions.Add(new(29, "蓋開升降汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_cover, (short)1])
@@ -126,30 +175,8 @@ namespace WpfApp_TestVISA
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"蓋開升降汽缸上升 {mem_cover} -> 0"),
             });
-            AddSigCount(32, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V"));
+            AddSigCount(32, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V"));
             
-            string mem_5Vpos = "ZBRT_Supply_5V+".GetPLCMem();//M3051
-            string mem_5Vneg = "ZBRT_Supply_5V-".GetPLCMem();//M3052
-            Instructions.Add(new(33, "導通5V+", Order.SendPLCSignal, [Global.PLC, mem_5Vpos, (short)1])
-            {
-                OnStart = (Ins) =>
-                {
-                    NextStep();
-                    Thread.Sleep(2000);
-                    SysLog.Add(LogLevel.Info, $"導通5V+ {mem_5Vpos}->1");
-                },
-                OnEnd = (Ins) => Thread.Sleep(500)
-            });
-            Instructions.Add(new(33, "導通5V-", Order.SendPLCSignal, [Global.PLC, mem_5Vneg, (short)1])
-            {
-                OnStart = (Ins) =>
-                {
-                    NextStep(); //->"5V,mA 電表測試"
-                    SysLog.Add(LogLevel.Info, $"導通5V- {mem_5Vneg}->1");
-                }
-            });
-            AddSigCount(34, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.Switch1Check = "V"));
-
             Instructions.Add(new(35, "斷開5V+", Order.SendPLCSignal, [Global.PLC, mem_5Vpos, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"斷開5V+ {mem_5Vpos}->0"),
@@ -158,7 +185,7 @@ namespace WpfApp_TestVISA
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"斷開5V- {mem_5Vneg}->0"),
             });
-            AddSigCount(34,photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V"));
+            AddSigCount(34, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V"));
             
             string mem_LowV = "ZBRT_Supply_2.4V".GetPLCMem();//M3058
             Instructions.Add(new(44, "2.4V導通", Order.SendPLCSignal, [Global.PLC, mem_LowV, (short)1])
@@ -175,14 +202,22 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) =>
                 {
                     SysLog.Add(LogLevel.Info, "長亮檢查");
-                    /*
+                    DateTime t_start = DateTime.Now;
                     while (Global.PLC.ReadOneData(photoresistor).ReturnValue == 0)
+                    {
+                        if ((DateTime.Now - t_start).TotalSeconds > 5.0)
+                        {
+                            Ins.ExcResult = ExcResult.TimeOut;
+                            return;
+                        }
                         Thread.Sleep(100);
-                    Thread.Sleep(1000);
+                    }
+                    Thread.Sleep(2000);
                     if (Global.PLC.ReadOneData(photoresistor).ReturnValue == 1)
+                    {
+                        Ins.ExcResult = ExcResult.Success;
                         return;
-                    */
-                    Thread.Sleep(5000);
+                    }
                 }
             });
             
@@ -198,12 +233,12 @@ namespace WpfApp_TestVISA
                     SysLog.Add(LogLevel.Info, $"測試開關汽缸下降 {mem_switch}-> 1");
                 }
             });
-            AddSigCount(48, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.OnOffCheck = "V"));
+            AddSigCount(48, photoresistor, 1);
             Instructions.Add(new(49, "測試開關汽缸上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"測試開關汽缸上升 {mem_switch} -> 0"),
             });
-
+            AddSigCount(48, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.OnOffCheck = "V"));
             Instructions.Add(new(50, "頻譜儀天線強度測試", Order.Custom)
             {
                 OnStart = (Ins) =>
@@ -239,6 +274,7 @@ namespace WpfApp_TestVISA
                 },
                 OnEnd = (Ins) => Thread.Sleep(1000)
             });
+
             Instructions.Add(new(51, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sensor_cyUD_UP, (short)1, 2000])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"確認汽缸在上定位 {sensor_cyUD_UP} == 1"),
@@ -282,32 +318,32 @@ namespace WpfApp_TestVISA
 
                 }
             });
-            Task.Run(() =>
+            Task.Run((Action)(() =>
             {
-                SignalNext = false;
+                this.SignalNext = false;
                 if (IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
                 foreach (Instruction ins in Instructions)
                 {
-                    "流程".TryCatch(() =>
+                    "流程".TryCatch((Action)(() =>
                     {
                         if (IsModeStep)
                         {
                             SysLog.Add(LogLevel.Info, $"{ins.Title}:步進等待...");
-                            while (!SignalNext)
+                            while (!this.SignalNext)
                                 Thread.Sleep(100);
                         }
                         int id = ins.ID ?? -1;
                         string title = ins.Title;
                         ins?.Execute();
-                        SignalNext = false;
+                        this.SignalNext = false;
                         //if (ins != null && ins.ExcResult != ExcResult.Success)
                         //    return;
-                    });
+                    }));
                 }
-                SignalNext = false;
+                this.SignalNext = false;
                 IsBusy = false;
-            });
+            }));
         }
         public void ProcedureBurn_ZBRT()
         {
@@ -385,12 +421,12 @@ namespace WpfApp_TestVISA
                     //CurrentProduct!.BurnCheck = (Ins.ExcResult == ExcResult.Success) ? "V" : "X";
                     if (Ins.ExcResult != ExcResult.Success)
                     {
-                        int reT = 3;
+                        int reT = BurnRetryT;
                         Instruction insBurnRe = new(101, "燒錄", Order.Burn, "PathBAT_ZBRT");
                         for (int i = 0; i < reT; i++)
                         {
                             SysLog.Add(LogLevel.Warning, "燒錄重試開始...");
-                            Thread.Sleep(1000);
+                            Thread.Sleep(500);
                             insBurnRe.Execute();
                             Ins.ExcResult = insBurnRe.ExcResult;
                             if (Ins.ExcResult == ExcResult.Success)
@@ -453,43 +489,43 @@ namespace WpfApp_TestVISA
                     NextStep();
                 }
             });
-            Task.Run(() =>
+            Task.Run((Action)(() =>
             {
-                "燒錄流程".TryCatch(() =>
+                "燒錄流程".TryCatch((Action)(() =>
                 {
                     IsBusyBurn = true;
-                    SignalNextBurn = false;
-                    if (IsModeStepBurn)
+                    this.SignalNext = false;
+                    if (IsModeStep)
                         SysLog.Add(LogLevel.Warning, "步進模式");
                     foreach (Instruction ins in InstructionsBurn)
                     {
                         if (IsBurnReseting)
                         {
-                            SignalNextBurn = false;
+                            this.SignalNext = false;
                             IsBusyBurn = false;
                             //ResetSteps();
                             return;
                         }
-                        if (IsModeStepBurn)
+                        if (IsModeStep)
                         {
                             SysLog.Add(LogLevel.Info, $"{ins.Title}:步進等待...");
-                            while (!SignalNextBurn)
+                            while (!this.SignalNext)
                                 Thread.Sleep(100);
                         }
                         int id = ins.ID ?? -1;
                         string title = ins.Title;
                         ins?.Execute();
-                        SignalNextBurn = false;
+                        this.SignalNext = false;
                         if (ins != null && ins.ExcResult != ExcResult.Success)
                             return;
                     }
-                }, () =>
+                }), (Action?)(() =>
                 {
                     //ResetSteps();
-                    SignalNextBurn = false;
+                    this.SignalNext = false;
                     IsBusyBurn = false;
-                });
-            });
+                }));
+            }));
         }
     }
 }
