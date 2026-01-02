@@ -22,7 +22,10 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Ivi.Visa">
-      <HintPath>Ivi.Visa.dll</HintPath>
+      <HintPath>..\..\..\..\..\..\Program Files\IVI Foundation\VISA\Microsoft.NET\Framework64\v2.0.50727\VISA.NET Shared Components 7.2.0\Ivi.Visa.dll</HintPath>
+    </Reference>
+    <Reference Include="Keysight.Visa">
+      <HintPath>..\..\..\..\..\..\Program Files\Keysight\IO Libraries Suite\Keysight.Visa.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

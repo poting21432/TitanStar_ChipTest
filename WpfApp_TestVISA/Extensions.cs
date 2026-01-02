@@ -10,6 +10,13 @@ namespace WpfApp_TestOmron
 {
     public static class Extensions
     {
+        public static string ToVisaVxi11(this string ipOrHost)
+        {
+            if (string.IsNullOrWhiteSpace(ipOrHost))
+                throw new ArgumentException("IP or Host cannot be null or empty");
+
+            return $"TCPIP0::{ipOrHost}::inst0::INSTR";
+        }
         public static byte[] ConcatMultiple(this byte[] startArray, params byte[][] arrays)
         {
             using MemoryStream ms = new();

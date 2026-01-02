@@ -22,9 +22,10 @@
         <StackPanel Margin="10">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="VISA裝置" Width="120"/>
-                <ComboBox ItemsSource="{Binding VISA_Devices}" FontSize="25" Width="410" Margin="10 0"/>
-                <Button Content="刷新" IsEnabled="{Binding EnConnect}" Command="{Binding Command_Connect}" Width="100" FontSize="25"/>
-                <Button Content="{Binding TextConnect}" IsEnabled="{Binding EnConnect}" Command="{Binding Command_Connect}" Width="100" Margin="10 0" FontSize="25"/>
+                <ComboBox ItemsSource="{Binding VISA_Devices}" FontSize="25" Width="410" Margin="10 0" Visibility="Collapsed"/>
+                <Button Content="刷新" IsEnabled="{Binding EnConnect}" Command="{Binding Command_Refresh}" Width="100" FontSize="25" Visibility="Collapsed"/>
+                <Button Content="{Binding TextConnect}" IsEnabled="{Binding EnConnect}" Command="{Binding Command_ConnectSwitch}" Width="100" Margin="10 0" FontSize="25"
+                         Visibility="Collapsed"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal" Margin="0 10">
                 <TextBlock Text="寫入數據" Width="120"/>
@@ -64,19 +65,28 @@
                     </CheckBox.LayoutTransform>
                 </CheckBox>
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <Button Content="測試流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
-                <Button Content="測試復歸" Width="200" Margin="20 0" FontSize="30" Height="45" Command="{Binding Commnad_MainReset}"/>
+            <StackPanel Orientation="Horizontal" Margin="10 5">
+                <Button Content="燒錄流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_BurnSequence}"/>
+                <Button Content="燒錄終止復歸" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_BurnReset}"/>
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <Button Content="燒錄流程開始" Width="200" Margin="10" FontSize="30" Height="45" Command="{Binding Commnad_BurnSequence}"/>
-                <Button Content="燒錄復歸" Width="200" Margin="20 0" FontSize="30" Height="45" Command="{Binding Commnad_MainReset}"/>
+            <StackPanel Orientation="Horizontal" Margin="0 5">
+                <Button Content="燒錄步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepBurn}"/>
+                <CheckBox Content="步進模式" IsChecked="{Binding BurnState.IsModeStep}" Margin="10 0"/>
+                <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
+                <Ellipse Width="30" Height="30" StrokeThickness="3"
+                         Stroke="White" Fill="{Binding BurnState.BrushState}"/>
             </StackPanel>
-            <StackPanel Orientation="Horizontal">
-                <Button Content="步進" Width="200" Margin="10 10" FontSize="30" Height="45" Command="{Binding Commnad_NextStepBurn}"/>
-                <CheckBox Content="步進模式" IsChecked="{Binding IsModeStep}" Margin="10 0"/>
+            <StackPanel Orientation="Horizontal" Margin="10 5">
+                <Button Content="測試流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
+                <Button Content="測試終止復歸" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_MainReset}"/>
             </StackPanel>
-            
+            <StackPanel Orientation="Horizontal" Margin="0 5">
+                <Button Content="測試步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepTest}"/>
+                <CheckBox Content="步進模式" IsChecked="{Binding TestState.IsModeStep}" Margin="10 0"/>
+                <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
+                <Ellipse Width="30" Height="30" StrokeThickness="3"
+         Stroke="White" Fill="{Binding TestState.BrushState}"/>
+            </StackPanel>
             <StackPanel Visibility="Collapsed" Orientation="Horizontal" Margin="10">
                 <Button Content="跳過目前步驟" FontSize="30" Width="240" Height="50"/>
                 <Button Content="取消生產" FontSize="30" Width="240" Height="50" Margin="10 0"/>
@@ -114,27 +124,44 @@
         <StackPanel>
             <StackPanel Orientation="Horizontal">
                 <StackPanel Margin="10">
-                    <TextBlock Text="電表測試" FontSize="40"/>
-                    <Button Width="200" Content="切電表為低量程" Height="50" Margin="0 10" Command="{Binding Command_SetPowerMeter_Low}"/>
+                    <TextBlock Text="電表測試" FontSize="30"/>
+                    <Button Width="200" Content="切電表為低量程" Height="50" Margin="0 5" Command="{Binding Command_SetPowerMeter_Low}"/>
                     <Button Width="200" Content="電表低量程量測" Height="50" Command="{Binding Command_TestPowerMeter_Low}"/>
-                    <Button Width="200" Content="切電表為高量程" Height="50" Margin="0 10" Command="{Binding Command_SetPowerMeter_High}"/>
+                    <Button Width="200" Content="切電表為高量程" Height="50" Margin="0 5" Command="{Binding Command_SetPowerMeter_High}"/>
                     <Button Width="200" Content="電表高量程量測" Height="50" Command="{Binding  Command_TestPowerMeter_High}"/>
-                    <Button Width="200" Content="G51 3V電壓On" Height="50" Command="{Binding  Command_Test1}"/>
-                    <Button Width="200" Content="G51 3V電壓Off" Height="50" Command="{Binding  Command_Test2}"/>
                 </StackPanel>
-                <StackPanel VerticalAlignment="Top">
-                    <TextBlock Text="手動燒錄" FontSize="40" Margin="0 10"/>
-                    <ComboBox ItemsSource="{Binding BurnTypes}" SelectedValue="{Binding SelectedBurnType}"/>
-                    <Button Width="200" Content="燒錄" Height="50" Margin="0 10" Command="{Binding Command_TestBurn}"/>
-                    <Button Width="200" Content="光敏測試" Height="50" Margin="0 10" Command="{Binding Command_PhotoresistTest}"/>
-
-                    <Button Width="200" Content="G51 3V探針On" Height="50" Command="{Binding  Command_Test3}"/>
-                    <Button Width="200" Content="G51 3V探針Off" Height="50" Command="{Binding  Command_Test4}"/>
+                <StackPanel VerticalAlignment="Top" Margin="0 10">
+                    <TextBlock Text="燒錄檔案" FontSize="30" Margin="0 0 0 2"/>
+                    <ComboBox ItemsSource="{Binding BurnTypes}" SelectedValue="{Binding SelectedBurnType}" Margin="0 5"/>
+                    <Button Width="200" Content="燒錄" Height="50" Margin="0 5" Command="{Binding Command_TestBurn}"/>
+                    <Button Width="200" Content="頻譜儀偵測開始" Height="50" Margin="0 5" Command="{Binding  Command_TestN9000B}"/>
+                    <Button Width="200" Content="頻譜儀讀取結果" Height="50" Command="{Binding  Command_ReadN9000B}"/>
                 </StackPanel>
             </StackPanel>
-            <DataGrid Margin="0 20" AutoGenerateColumns="False" FontSize="30" Style="{StaticResource StyleDataGrid_RowSelection}"
-                    IsReadOnly="True" ItemsSource="{Binding PLCAddrData}" Height="660" CanUserSortColumns="True" CanUserAddRows="False"
-                      SelectedItem="{Binding SelectedPLCAddr}" >
+            <StackPanel Margin="10 5" Orientation="Horizontal">
+                <TextBlock Text="G51供電" Width="115"/>
+                <Button Content="3V" Width="65" Margin="5 0" Command="{Binding Command_G51_3VON}"/>
+                <Button Content="5V" Width="65" Command="{Binding Command_G51_5VON}"/>
+                <Button Content="OFF" Width="65" Margin="5 0" Command="{Binding Command_G51_OFF}"/>
+            </StackPanel>
+            <StackPanel Margin="10 5" Orientation="Horizontal">
+                <TextBlock Text="{Binding G51_Supply}" Width="115" TextAlignment="Center"/>
+                <Button Content="探針" Width="65" Margin="5 0" Command="{Binding Command_G51_PrbON}"/>
+                <Button Content="2.4V" Width="65" Command="{Binding Command_G51_LowV}"/>
+            </StackPanel>
+            <StackPanel Margin="10 5" Orientation="Horizontal">
+                <TextBlock Text="ZBRT供電" Width="115"/>
+                <Button Content="3V" Width="65" Margin="5 0" Command="{Binding Command_ZBRT_3VON}"/>
+                <Button Content="5V" Width="65" Command="{Binding Command_ZBRT_5VON}"/>
+                <Button Content="OFF" Width="65" Margin="5 0" Command="{Binding Command_ZBRT_OFF}"/>
+            </StackPanel>
+            <StackPanel Margin="10 5" Orientation="Horizontal">
+                <TextBlock Text="{Binding ZBRT_Supply}" Width="115" TextAlignment="Center"/>
+                <Button Content="2.4V" Width="65" Margin="5 0" Command="{Binding Command_ZBRT_LowV}"/>
+            </StackPanel>
+            <DataGrid Margin="0 10" AutoGenerateColumns="False" FontSize="30" Style="{StaticResource StyleDataGrid_RowSelection}"
+                     ItemsSource="{Binding PLCAddrData}" Height="550" CanUserSortColumns="True" CanUserAddRows="False"
+                     IsReadOnly="True" SelectedItem="{Binding SelectedPLCAddr}" >
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="ID" FontSize="20" Binding="{Binding Id}" Width="50"/>
                     <DataGridTextColumn Header="名稱" FontSize="20" Binding="{Binding Title}" Width="210"/>

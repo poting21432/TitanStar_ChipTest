@@ -14,6 +14,7 @@ using System.IO.Ports;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Media;
 using WpfApp_TestOmron;
 
 namespace WpfApp_TestVISA
@@ -28,6 +29,7 @@ namespace WpfApp_TestVISA
         SendModbus,
         WaitModbus,
         ReadModbusFloat,
+        WaitModbusFloat,
     }
     [AddINotifyPropertyChangedInterface]
     public class Instruction(int ID, string Title, Order? InsOrder, params object[] Parameters)
@@ -75,6 +77,9 @@ namespace WpfApp_TestVISA
                 case Order.WaitModbus:
                     ExcResult = WaitModbus();
                     break;
+                case Order.WaitModbusFloat:
+                    ExcResult = WaitModbusFloat();
+                    break;
             }
             OnEnd?.Invoke(this);
             return ExcResult;
@@ -91,7 +96,6 @@ namespace WpfApp_TestVISA
             Thread.Sleep(Global.PLCDelayMs);
             return (result.IsSuccess) ? ExcResult.Success : ExcResult.Error;
         }
-
         private ExcResult WaitPLC()
         {
             if (Parameters.Length != 4)
@@ -243,17 +247,65 @@ namespace WpfApp_TestVISA
                 Thread.Sleep(Global.ModbusDelayMs);
             }
             return ExcResult.Abort;
+        }
+        private ExcResult WaitModbusFloat()
+        {
+            if (Global.ModbusPort == null)
+            {
+                SysLog.Add(LogLevel.Error, "電表序列埠未設定");
+                ExcResult = ExcResult.Error;
+                return ExcResult.Error;
+            }
+            if (Parameters.Length != 4)
+                throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
 
+            float volt = 0.0f;
+            ushort[] regs = [];
+            SerialPort port = Global.ModbusPort;
+            var master = ModbusSerialMaster.CreateRtu(port);
+            if (Parameters[0] is not ushort regAddr) // 0x30(48): 低量程電流 //0x32(50): 高量程電流
+                throw new Exception($"{InstructionMessage}: 參數為空值");
+            if (Parameters[1] is not float minV)
+                throw new Exception($"{InstructionMessage}: 參數為空值");
+            if (Parameters[2] is not float maxV)
+                throw new Exception($"{InstructionMessage}: 參數為空值");
+            if (Parameters[3] is not int timeOut)
+                throw new Exception($"{InstructionMessage}: 參數為空值");
+            if (port.IsOpen)
+                port.Close();
+            port.Open();
+            DateTime t_start = DateTime.Now;
+
+            while((DateTime.Now - t_start).TotalMilliseconds < timeOut)
+            {
+                Thread.Sleep(300);
+                byte slaveId = 1;
+                regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
+                port.Close();
+                if (regs.Length == 2)
+                {
+                    ExcResult = ExcResult.Success;
+                    volt = ConvertFloatFromRegisters(regs);
+                    Result = volt;
+                    if (volt < maxV && volt > minV)
+                        return ExcResult.Success;
+                }
+                else
+                {
+                    ExcResult = ExcResult.Error;
+                    volt = float.NaN; 
+                    Result = null;
+                }
+            }
+            return ExcResult.TimeOut;
         }
         private ExcResult BurnSequence()
         {
-            SysLog.Add(LogLevel.Info, "燒錄中");
-            //Thread.Sleep(5000);
-            //return ExcResult.Success;
+            SysLog.Add(LogLevel.Info, "燒錄中(TimeOut:30s)");
             if (Parameters.Length != 1)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
             string BurnBAT = Parameters[0]?.ToString() ?? "";
-            var process = new Process();
+            Global.ProcessBurn = new Process();
             Global.BATPath.TryGetValue(BurnBAT, out Config? config);
             if (string.IsNullOrEmpty(config?.Value))
             {
@@ -267,16 +319,16 @@ namespace WpfApp_TestVISA
                 return ExcResult.Error;
             }
             ExcResult result = ExcResult.Success;
-            process.StartInfo.FileName = Global.CurrentBurnBATPath;
-            process.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
-            process.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出
-            process.StartInfo.RedirectStandardError = true;    // 重定向錯誤輸出
-            process.StartInfo.CreateNoWindow = true;           // 不顯示 cmd 視窗
+            Global.ProcessBurn.StartInfo.FileName = Global.CurrentBurnBATPath;
+            Global.ProcessBurn.StartInfo.UseShellExecute = false;         // 必須為 false 才能重定向輸出
+            Global.ProcessBurn.StartInfo.RedirectStandardOutput = true;   // 重定向標準輸出
+            Global.ProcessBurn.StartInfo.RedirectStandardError = true;    // 重定向錯誤輸出
+            Global.ProcessBurn.StartInfo.CreateNoWindow = true;           // 不顯示 cmd 視窗
 
             string stdOutput = "";
             string stdError = "";
-            
-            process.OutputDataReceived += (sender, e) =>
+
+            Global.ProcessBurn.OutputDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
                 {
@@ -287,7 +339,8 @@ namespace WpfApp_TestVISA
                         SysLog.Add(LogLevel.Info, $"{e.Data}");
                 }
             };
-            process.ErrorDataReceived += (sender, e) =>
+
+            Global.ProcessBurn.ErrorDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
                 {
@@ -297,10 +350,10 @@ namespace WpfApp_TestVISA
                 }
             };
 
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            bool isComplete = process.WaitForExit(30000); // 等待執行完成
+            Global.ProcessBurn.Start();
+            Global.ProcessBurn.BeginOutputReadLine();
+            Global.ProcessBurn.BeginErrorReadLine();
+            bool isComplete = Global.ProcessBurn.WaitForExit(30000); // 等待執行完成
             string output = stdOutput;
             string error = stdError;
             if (!isComplete)
@@ -314,6 +367,7 @@ namespace WpfApp_TestVISA
                 result = ExcResult.Error;
             }
             else SysLog.Add(LogLevel.Success, "燒錄完成");
+            Global.ProcessBurn = null;
             return result;
         }
 
@@ -325,6 +379,80 @@ namespace WpfApp_TestVISA
             bytes[0] = (byte)(regs[1] >> 8);
             bytes[1] = (byte)(regs[1] & 0xFF);
             return BitConverter.ToSingle(bytes, 0);
+        }
+    }
+    [AddINotifyPropertyChangedInterface]
+    public class ProcedureState(string Title)
+    {
+        public string Title { get; set; } = Title;
+        public SolidColorBrush BrushState { get; set; } = Brushes.Transparent;
+        public DateTime? TStart { get;set; }
+        public int ProductCount { get; set; } = 0;
+
+        private bool isModeStep = false;
+        public bool IsModeStep { get => isModeStep;
+            set 
+            {
+                if (!isModeStep && value)
+                    SysLog.Add(LogLevel.Warning, "步進模式啟用");
+                else if(isModeStep && !value)
+                    SysLog.Add(LogLevel.Warning, "步進模式解除");
+                isModeStep = value;
+            } 
+        }
+        public bool IsEnAutoNG { get; set; } = true;
+        public bool IsBusy { get; set; } = false;
+        public bool SignalNext { get;set; } = false;
+        public bool IsStop { get; set; } = false;
+        public bool IsReseting { get; set; } = false;
+        public bool IsCompleted { get; set; } = false;
+
+        public void ResetState(string Title)
+        {
+            this.Title = Title;
+            ProductCount = 0;
+        }
+        public void SetStart()
+        {
+            Model_Main.DispMain?.Invoke(() =>
+            {
+                BrushState = Brushes.Blue;
+                TStart = DateTime.Now;
+                IsBusy = false;
+                SignalNext = false;
+                IsStop = false;
+                IsCompleted = false;
+            });
+        }
+        public void SetEnd(int StateID)
+        {
+            double t = (DateTime.Now - TStart)?.TotalSeconds ?? double.NaN;
+            string fstr = ((StateID) switch
+            {
+                3 => "手動強制",
+                2 => "異常",
+                1 => "正常",
+                _ => throw new NotImplementedException(),
+            });
+            LogLevel logLevel = ((StateID) switch
+            {
+                3 => LogLevel.Warning,
+                2 => LogLevel.Error,
+                1 => LogLevel.Info,
+                _ => throw new NotImplementedException(),
+            });
+            BrushState = ((StateID) switch
+            {
+                3 => Brushes.Red,
+                2 => Brushes.Red,
+                1 => Brushes.GreenYellow,
+                _ => throw new NotImplementedException(),
+            });
+            SysLog.Add(logLevel, $"程序{fstr}結束，花費時間{t:F2}秒");
+            IsBusy = false;
+            SignalNext = false;
+            IsStop = false;
+            IsCompleted = true;
         }
     }
 }

@@ -1,46 +1,46 @@
 ﻿using DeviceDB;
-using Ivi.Visa;
-using Ivi.Visa.FormattedIO;
+using Keysight.Visa;
 using Modbus.Device;
 using PLC;
 using PropertyChanged;
 using Support;
 using Support.Data;
 using Support.Logger;
+using Support.Net;
 using Support.Wpf;
 using Support.Wpf.Models;
 using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.DirectoryServices.ActiveDirectory;
 using System.IO.Ports;
 using System.Net;
+using System.Resources;
 using System.Threading;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using WpfApp_TestOmron;
 using WpfApp_TestVISA;
+using ResourceManager = Keysight.Visa.ResourceManager;
 namespace WpfApp_TestVISA
 {
     [AddINotifyPropertyChangedInterface]
     public partial class Model_Main
     {
         public static Dispatcher? DispMain;
-        public string IP_Port { get; set; } = "192.168.0.1:9600";
         public string WriteData { get; set; } = "*IDN?";
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
 
-        internal bool IsStop { get; set; } = false;
         public int CurrentStepID = 0;
 
         private string PathBatBurn = "";
-
-        public bool IsBusy { get; set; } = false;
-        public bool IsBusyBurn { get; set; } = false;
         public int BurnRetryT { get; set; } = 3;
+        public string ZBRT_Supply { get; set; } = "OFF";
+        public string G51_Supply { get; set; } = "OFF";
         public ObservableCollection<string> AssignedTests { get; set; } = ["燒錄bat呼叫", "頻譜儀天線測試", "3V-uA電表測試", "5V-mA電表測試", "LED 閃爍計數檢測"];
-
         public ObservableCollection<string> VISA_Devices { get; set; } = [];
         public ObservableCollection<ProductRecord> ProductRecords { get; set; } = [];
         public string DeviceVISA { get; set; } = "";
@@ -51,38 +51,71 @@ namespace WpfApp_TestVISA
             get => selectedProductType;
             set
             {
-                selectedProductType = value;
-                if(value == "G51")
+                if(value == "G51" && selectedProductType!="G51")
+                {
                     InitSteps(StrSteps_G51);
-                else if(value =="ZBRT")
+                    if(TestState.IsBusy)
+                    {
+                        SysLog.Add(LogLevel.Warning, $"程序正在執行，{TestState.Title}強制停止復歸");
+                        Command_MainReset.Execute(null);
+                    }
+                    if (BurnState.IsBusy)
+                    {
+                        SysLog.Add(LogLevel.Warning, $"程序正在執行，{BurnState.Title}強制停止復歸");
+                        Command_BurnReset.Execute(null);
+                    }
+                    TestState.ResetState("G51測試程序");
+                    BurnState.ResetState("G51燒錄程序");
+                }
+                else if(value == "ZBRT" && selectedProductType != "ZBRT")
+                {
                     InitSteps(StrSteps_ZBRT);
-
+                    if (TestState.IsBusy)
+                    {
+                        SysLog.Add(LogLevel.Warning, $"程序正在執行，{TestState.Title}強制停止復歸");
+                        Command_MainReset.Execute(null);
+                    }
+                    if (BurnState.IsBusy)
+                    {
+                        SysLog.Add(LogLevel.Warning, $"程序正在執行，{BurnState.Title}強制停止復歸");
+                        Command_BurnReset.Execute(null);
+                    }
+                    TestState.ResetState("ZBRT測試程序");
+                    BurnState.ResetState("ZBRT燒錄程序");
+                }
+                selectedProductType = value;
             }
         }
         public ObservableCollection<Instruction> Instructions { get; set; } = [];
         public ObservableCollection<Instruction> InstructionsBurn { get; set; } = [];
         public ObservableCollection<StepData> StepsData { get; set; } = [];
         public Dictionary<int, StepData?> MapSteps { get; set; } = [];
-        public IMessageBasedSession? Session { get; set; }
+        
         public ICommand Command_Refresh { get; set; }
         public ICommand Command_ConnectSwitch { get; set; }
         public ICommand Command_Write { get; set; }
         public ICommand Commnad_MainSequence { get; set; }
         public ICommand Commnad_BurnSequence { get; set; }
-        public ICommand Command_Test1 { get; set; }
-        public ICommand Command_Test2 { get; set; }
-        public ICommand Command_Test3 { get; set; }
-        public ICommand Command_Test4 { get; set; }
-        public ICommand Commnad_MainReset { get; set; }
-        public ICommand Commnad_BurnReset { get; set; }
-        public ICommand Commnad_NextStepBurn { get; set; }
+        public ICommand Command_G51_3VON { get; set; }
+        public ICommand Command_G51_5VON { get; set; }
+        public ICommand Command_G51_PrbON { get; set; }
+        public ICommand Command_G51_LowV { get; set; }
+        public ICommand Command_G51_OFF { get; set; }
+        public ICommand Command_ZBRT_3VON { get; set; }
+        public ICommand Command_ZBRT_5VON { get; set; }
+        public ICommand Command_ZBRT_LowV { get; set; }
+        public ICommand Command_ZBRT_OFF { get; set; }
+        public ICommand Command_TestN9000B { get; set; }
+        public ICommand Command_ReadN9000B { get; set; }
+        public ICommand Command_MainReset { get; set; }
+        public ICommand Command_BurnReset { get; set; }
+        public ICommand Command_NextStepBurn { get; set; }
+        public ICommand Command_NextStepTest { get; set; }
         public ICommand Command_SetPowerMeter_High { get; set; }
         public ICommand Command_SetPowerMeter_Low { get; set; }
         public ICommand Command_TestPowerMeter_Low { get; set; }
         public ICommand Command_TestPowerMeter_High { get; set; }
         public ICommand Command_TestBurn { get; set; }
-
-        public ICommand Command_PhotoresistTest { get; set; }
         public ObservableCollection<string> BurnTypes { get; set; } = ["PathBAT_G51", "PathBAT_ZBRT"];
         public ObservableCollection<PLCData> PLCAddrData { get; set; } = [];
         public PLCAddr? SelectedPLCAddr { get; set; }
@@ -92,9 +125,6 @@ namespace WpfApp_TestVISA
         //public TcpClientApp TcpConnect { get; set; } = new();
         private bool isRefreshing = false;
         private bool IsConnected = false;
-        MessageBasedFormattedIO? FormattedIO = null;
-        public bool IsModeStep { get; set; } = false;
-        internal bool SignalNext = false;
 
         public bool IsManualMode { get; set; } = true;
         public Model_Main()
@@ -117,18 +147,18 @@ namespace WpfApp_TestVISA
                         short value_BG51 = Global.PLC.ReadOneData(memReady_BG51).ReturnValue;
                         short value_G51 = Global.PLC.ReadOneData(memReady_G51).ReturnValue;
                         
-                        if (value_BG51 == 1 && !IsBusyBurn)
+                        if (value_BG51 == 1 && !BurnState.IsBusy)
                             ProcedureBurn_G51();
-                        else if (value_G51 == 1 && !IsBusy)
+                        else if (value_G51 == 1 && !TestState.IsBusy)
                             ProcedureMain_G51();
                     }
                     else if(SelectedProductType == "ZBRT")
                     {
                         short value_BZBRT = Global.PLC.ReadOneData(memReady_BZBRT).ReturnValue;
                         short value_ZBRT = Global.PLC.ReadOneData(memReady_ZBRT).ReturnValue;
-                        if (value_BZBRT == 1 && !IsBusyBurn)
+                        if (value_BZBRT == 1 && !BurnState.IsBusy)
                             ProcedureBurn_ZBRT();
-                        else if (value_ZBRT == 1 && !IsBusy)
+                        else if (value_ZBRT == 1 && !TestState.IsBusy)
                             ProcedureMain_ZBRT();
                     }
                 }
@@ -178,73 +208,79 @@ namespace WpfApp_TestVISA
             ///重要: 使用這個函式庫需要先安裝 Library Suite
             ///https://www.keysight.com/tw/zh/lib/software-detail/computer-software/io-libraries-suite-downloads-2175637.html
             Command_Refresh = new RelayCommand<object>((obj) => {
+                /*
                 Task.Run(() =>
                 {
                     "裝置刷新".TryCatch(() =>
                     {
                         if (isRefreshing) return;
                         isRefreshing = true;
-                        var dev_list = GlobalResourceManager.Find("TCPIP?*inst?*INSTR");
+                        string[] dev_list = Global.KeysightManager.Find("?*INSTR").ToArray();
+                        //"TCPIP?*inst?*INSTR"
 
                         DispMain?.Invoke(() => {
                             VISA_Devices = new(dev_list);
                             SysLog.Add(LogLevel.Info, $"已獲取裝置清單: {VISA_Devices.Count}個裝置");
                         });
-                        isRefreshing = false;
-                    });
-                });
+                    },()=>isRefreshing = false);
+                });//*/
             });
             Command_ConnectSwitch = new RelayCommand<object>((obj) =>
             {
                 $"裝置{TextConnect}".TryCatch(() => {
                     if (IsConnected)
                     {
-                        Session?.Dispose();
-                        FormattedIO = null;
-                        Session = null;
-                        EnConnect = true;
-                        TextConnect = "連線";
-                        IsConnected = false;
+                        DispMain?.Invoke(() =>
+                        {
+                            EnConnect = true;
+                            TextConnect = "連線";
+                            IsConnected = false;
+                        });
                         return;
                     }
                     else
                     {
-                        EnConnect = false;
-                        TextConnect = "連線中";
-                        Task.Run(() =>
+                        DispMain?.Invoke(() =>
                         {
-                            try
+                            EnConnect = false;
+                            TextConnect = "連線中";
+                        });
+                        try
+                        {
+                            DispMain?.Invoke(() =>
                             {
-                                Session = GlobalResourceManager.Open(DeviceVISA) as IMessageBasedSession;
-                                FormattedIO = new MessageBasedFormattedIO(Session);
-                                DispMain?.Invoke(() =>
-                                {
-                                    EnConnect = true;
-                                    TextConnect = "斷線";
-                                    IsConnected = true;
-                                });
-                            }
-                            catch (Exception)
+                                EnConnect = true;
+                                TextConnect = "斷線";
+                                IsConnected = true;
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            SysLog.Add(LogLevel.Error, $"連線錯誤{ex.Message}");
+                            DispMain?.Invoke(() =>
                             {
-                                SysLog.Add(LogLevel.Error, "連線超時");
                                 EnConnect = true;
                                 TextConnect = "連線";
                                 IsConnected = false;
-                            }
-                        });
+                            });
+                        }
                     }
                     if (string.IsNullOrEmpty(DeviceVISA))
                         return;
                 });
 
-            });
-            Command_Write = new RelayCommand<object>((obj) =>
+            }); 
+            
+            Command_Write = new RelayCommand<object>(async (obj) =>
             {
-                "命令".TryCatch(() =>
+
+                SysLog.Add(LogLevel.Info, $"頻譜儀命令:{WriteData}");
+                string[] recv = await Global.TcpCommand.SendAndReceiveSequenceAsync(WriteData +"\r\n", 2);
+                if (WriteData.Contains("?") && recv.Length >= 2)
                 {
-                    FormattedIO?.WriteLine(WriteData);
-                    SysLog.Add(LogLevel.Success, $"已接收: {FormattedIO?.ReadLine()}");
-                });
+                    string result = recv[1].Trim().Replace("\r", "").Replace("\n", "");
+                    SysLog.Add(LogLevel.Info, $"頻譜儀回應:{result}");
+                }
             });
 
             Commnad_MainSequence = new RelayCommand<object>((obj) =>
@@ -261,17 +297,33 @@ namespace WpfApp_TestVISA
                 else if(SelectedProductType == "ZBRT")
                     ProcedureBurn_ZBRT();
             });
-            Commnad_MainReset = new RelayCommand<object>((obj) =>
+            Command_MainReset = new RelayCommand<object>((obj) =>
             {
-                Task.Run(()=> ProcedureReset());
+                Task.Run(() =>
+                {
+                    if (SelectedProductType == "G51")
+                        ProcedureG51ResetTest();
+                    else if (SelectedProductType == "ZBRT")
+                        ProcedureZBRTResetTest();
+                });
             });
-            Commnad_BurnReset = new RelayCommand<object>((obj) =>
+            Command_BurnReset = new RelayCommand<object>((obj) =>
             {
-                Task.Run(() => ProcedureBurnReset());
+                Task.Run(() =>
+                {
+                    if (SelectedProductType == "G51")
+                        ProcedureG51ResetBurn();
+                    else if (SelectedProductType == "ZBRT")
+                        ProcedureZBRTResetBurn();
+                });
             });
-            Commnad_NextStepBurn = new RelayCommand<object>((obj) =>
+            Command_NextStepBurn = new RelayCommand<object>((obj) =>
             {
-                SignalNext = true;
+                BurnState.SignalNext = true;
+            });
+            Command_NextStepTest = new RelayCommand<object>((obj) =>
+            {
+                TestState.SignalNext = true;
             });
             Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
             {
@@ -360,55 +412,129 @@ namespace WpfApp_TestVISA
                 });
                 Task.Run(() => ins.Execute());
             });
-            Command_PhotoresistTest = new RelayCommand<object>((obj) =>
+            string G51_v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
+            string G51_v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
+            string G51_v5_pos = "G51_Supply_5V+".GetPLCMem(); //M3003
+            string G51_v5_neg = "G51_Supply_5V-".GetPLCMem(); //M3004
+            string G51_v_low = "G51_Supply_2.4V".GetPLCMem(); //M3011
+            string G51_v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
+            Command_G51_3VON = new RelayCommand<object>((obj) =>
             {
-                Task.Run(() =>
-                {
-                    string photoresistor = "M7000";//Test
-                    Instruction ins = new(1, $"閃爍檢測4次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)4, 10000])
-                    {
-                        OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 4次: M7000 ^v 4"),
-                        OnEnd = (Ins) =>
-                        {
-                            if (Ins.ExcResult != ExcResult.Success)
-                                SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                            else
-                            {
-                                SysLog.Add(LogLevel.Info, $"確認閃爍4次");
-                                Thread.Sleep(1000);
-                            }
-                        }
-                    };
-                    ins.Execute();
-                });
-            });
-            Command_Test1 = new RelayCommand<object>((obj) =>
-            {
-                string v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
-                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
-                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
-                Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
+                Global.PLC.WriteRandomData([G51_v5_pos, G51_v5_neg, G51_v_low, G51_v3_prb], [0, 0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos, G51_v3_neg], [1, 1]);
+                G51_Supply = "3V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
             }); 
-            Command_Test2 = new RelayCommand<object>((obj) =>
+            Command_G51_5VON = new RelayCommand<object>((obj) =>
             {
-                string v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
-                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
-                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
-                Global.PLC.WriteRandomData([v3_pos, v3_neg], [0, 0]);
+                Global.PLC.WriteRandomData([G51_v3_prb, G51_v_low], [0,0]); 
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos, G51_v3_neg, G51_v5_pos, G51_v5_neg], [1, 1, 1, 1]);
+                G51_Supply = "5V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            Command_G51_PrbON = new RelayCommand<object>((obj) =>
+            {
+                Global.PLC.WriteRandomData([G51_v5_pos, G51_v5_neg, G51_v_low], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos, G51_v3_neg, G51_v3_prb], [1, 1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v3_pos], [0]);
+                G51_Supply = "探針";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            Command_G51_LowV = new RelayCommand<object>((obj) =>
+            {
+                Global.PLC.WriteRandomData([G51_v5_pos, G51_v5_neg, G51_v_low], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos, G51_v3_neg, G51_v3_prb], [1, 1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v3_pos], [0]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v_low], [1]);
+                G51_Supply = "2.4V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
             });
 
-            Command_Test3 = new RelayCommand<object>((obj) =>
+            Command_G51_OFF = new RelayCommand<object>((obj) =>
             {
-                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
-                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
-                Global.PLC.WriteRandomData([v3_prb, v3_neg], [1, 1]);
+                Global.PLC.WriteRandomData([G51_v3_pos, G51_v3_neg, G51_v5_pos, G51_v5_neg, G51_v_low, G51_v3_prb],
+                                           [0, 0, 0, 0, 0, 0]);
+                G51_Supply = "OFF";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            string ZBRT_v5_pos = "ZBRT_Supply_5V+".GetPLCMem();//M3051
+            string ZBRT_v5_neg = "ZBRT_Supply_5V-".GetPLCMem();//M3052
+            string ZBRT_v3_pos = "ZBRT_Supply_3V+".GetPLCMem();//M3055
+            string ZBRT_v3_neg = "ZBRT_Supply_3V-".GetPLCMem();//M3056
+            string ZBRT_v_low = "ZBRT_Supply_2.4V".GetPLCMem();//M3058
+            Command_ZBRT_3VON = new RelayCommand<object>((obj) =>
+            {
+                Global.PLC.WriteRandomData([ZBRT_v5_pos, ZBRT_v5_pos, ZBRT_v_low], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v3_pos, ZBRT_v3_neg], [1, 1]);
+                ZBRT_Supply = "3V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+            Command_ZBRT_5VON = new RelayCommand<object>((obj) =>
+            {
+                Global.PLC.WriteRandomData([ZBRT_v_low, ZBRT_v3_pos, ZBRT_v3_neg], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v5_pos, ZBRT_v5_neg], [ 1, 1]);
+                ZBRT_Supply = "5V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+            Command_ZBRT_LowV = new RelayCommand<object>((obj) =>
+            {
+                Global.PLC.WriteRandomData([ZBRT_v5_pos, ZBRT_v5_neg, ZBRT_v_low], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v3_pos, ZBRT_v3_neg], [1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([ZBRT_v_low], [1]);
+                ZBRT_Supply = "2.4V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
             });
 
-            Command_Test4 = new RelayCommand<object>((obj) =>
+            Command_ZBRT_OFF = new RelayCommand<object>((obj) =>
             {
-                string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
-                string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
-                Global.PLC.WriteRandomData([v3_prb, v3_neg], [0, 0]);
+                Global.PLC.WriteRandomData([ZBRT_v3_pos, ZBRT_v3_neg, ZBRT_v5_pos, ZBRT_v5_neg, ZBRT_v_low],
+                                           [0, 0, 0, 0, 0]);
+                ZBRT_Supply = "OFF";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+
+
+            Command_TestN9000B = new RelayCommand<object>(async (obj) =>
+            {
+                ///*RST 重置資料 //提前做
+                ///*RCL 1 命令Recall File 1
+                ///:INIT:CONT OFF 停用量測
+                ///:ABORt 中斷下一次輪詢
+                ///:FETC:BPOW? 做完後
+                await Global.TcpCommand.SendAndReceiveSequenceAsync("*RST\r\n", 2);
+                SysLog.Add(LogLevel.Info, "頻譜儀重置");
+                //Thread.Sleep(1000);
+                await Global.TcpCommand.SendAndReceiveSequenceAsync("*RCL 1\r\n", 2);
+                SysLog.Add(LogLevel.Info, "頻譜儀切換程序(Recall):1");
+              
+                await Global.TcpCommand.SendAndReceiveSequenceAsync(":INIT:CONT OFF\r\n", 2);
+                Thread.Sleep(1000);
+                SysLog.Add(LogLevel.Warning, "頻譜儀準備完成");
+            });
+            Command_ReadN9000B = new RelayCommand<object>(async (obj) =>
+            {
+                ///*RST 重置資料 //提前做
+                ///*RCL 1 命令Recall File 1
+                ///:INIT:CONT OFF 停用量測
+                ///:ABORt 中斷下一次輪詢
+                ///:FETC:BPOW? 做完後
+                await Global.TcpCommand.SendAndReceiveAsync(":ABOR\r\n");
+                SysLog.Add(LogLevel.Info, "讀取開始");
+
+                string[] ret = await Global.TcpCommand.SendAndReceiveSequenceAsync(":FETC:BPOW?\r\n",3);
+                string[] data = ret[2].Split(',');
+                SysLog.Add(LogLevel.Info, $"頻譜儀回應: 輸出{data[2].ToDouble():F3} dBm");
             });
             InitSteps(StrSteps_G51);
             Task.Run(() =>
@@ -417,60 +543,18 @@ namespace WpfApp_TestVISA
                 Command_Refresh.Execute(null);
             });
         }
-        bool IsReseting = false;
-        bool IsBurnReseting = false;
-        public void ProcedureReset()
-        {
-            if (IsReseting)
-                return;
-            IsReseting = true;
-
-            while(IsBusy)
-            {
-                SysLog.Add(LogLevel.Warning, "等待測試程序結束...");
-                Thread.Sleep(5000);
-            }
-            //電路
-            Global.PLC.WriteOneData("M3011", 0);//2.4V
-            Global.PLC.WriteOneData("M3010", 0);
-            Global.PLC.WriteOneData("M3003", 0);//5V
-            Global.PLC.WriteOneData("M3004", 0);
-            Global.PLC.WriteOneData("M3008", 0);//3V
-            Global.PLC.WriteOneData("M3009", 0);
-            Thread.Sleep(1000);
-            //汽缸
-            Global.PLC.WriteOneData("M3014", 0);
-            Global.PLC.WriteOneData("M3006", 0);
-            Thread.Sleep(1000);
-            //開關
-            Global.PLC.WriteOneData("M3001", 0);
-            Global.PLC.WriteOneData("M3002", 0);
-            Global.PLC.WriteOneData("M3005", 0);
-            Thread.Sleep(500);
-
-            if (Global.PLC.ReadOneData("M4000").ReturnValue != 0)
-            {
-                SysLog.Add(LogLevel.Info, "確認升降汽缸在上定位");
-                Global.PLC.WriteOneData("M3012", 0);
-                Thread.Sleep(500);
-                SysLog.Add(LogLevel.Info, "升降汽缸下降 M3013 -> 1");
-                Global.PLC.WriteOneData("M3013", 1);
-                Thread.Sleep(1000);
-                while (Global.PLC.ReadOneData("M4001").ReturnValue == 0)
-                    Thread.Sleep(500);
-                SysLog.Add(LogLevel.Info, "確認汽缸已在下定位 M4001 == 1");
-                Global.PLC.WriteOneData("M3013", 0);
-                SysLog.Add(LogLevel.Info, "升降汽缸下降復歸 M3013 -> 0");
-            }
-            IsReseting = false;
-        }
+        
         public void ProcedureBurnReset()
         {
-            if (IsBurnReseting)
+            ProcedureState PState = BurnState;
+            if (PState.IsReseting)
+            {
+                SysLog.Add(LogLevel.Warning, $"已正在執行終止:{PState.Title}");
                 return;
-            IsBurnReseting = true;
+            }
+            PState.IsReseting = true;
 
-            while (IsBusyBurn)
+            while (BurnState.IsBusy)
             {
                 SysLog.Add(LogLevel.Warning, "等待燒錄 程序結束...");
                 Thread.Sleep(5000);
@@ -489,7 +573,7 @@ namespace WpfApp_TestVISA
                 Global.PLC.WriteOneData("M3021", 0);
                 SysLog.Add(LogLevel.Info, "燒錄升降汽缸下降復歸 M3021 -> 0");
             }
-            IsBurnReseting = false;
+            PState.IsReseting = false;
         }
         private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null, int timeOut = 5000)
         {

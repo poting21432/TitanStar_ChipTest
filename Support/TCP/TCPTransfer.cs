@@ -1,130 +1,180 @@
-﻿using PropertyChanged;
-using Support;
-using Support.Data;
-using Support.Logger;
+﻿using Support.Logger;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
+using System.Windows.Forms;
 
 namespace Support.Net
 {
-    [AddINotifyPropertyChangedInterface]
-    public class TCPCommander
+    public class TCPCommand(string serverIp, int serverPort)
     {
-        public string? ServerIP { get; set; } = "127.0.0.1";
-        public int Port { get; set; } = 33456;
-        public Action<string>? OnDataReceived { get; set; }
+        public string ServerIp { get; set; } = serverIp;
+        public int ServerPort { get; set; } = serverPort;
+        public int TimeoutMs { get; set; } = 30000;
 
-        public int CountRespTimeOut { get; set; } = 0;
-        public void Send(string data, bool IsTask = true, bool GetResponse = false, Func<bool>? CheckInterrupt = null)
+        private static readonly SemaphoreSlim _asyncLock = new(1, 1);
+        TcpClient _tcpClient = new();
+        /// <summary>
+        /// 傳送一個訊息給 Server 並等待回應一次
+        /// </summary>
+        public async Task ConnectAsync(CancellationToken token = default)
         {
-            if (IsTask)
-                Task.Run(() => SendData(data, GetResponse, CheckInterrupt));
-            else
-                SendData(data, GetResponse, CheckInterrupt);
-        }
-        private void SendData(string data, bool GetResponse = false, Func<bool>? CheckInterrupt = null)
-        {
-            //SysLog.Add(LogLevel.Info, "傳出:" + data);
-            "TCP傳出".TryCatch(() =>
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            _tcpClient = new();
+            var connectTask = _tcpClient!.ConnectAsync(ServerIp, ServerPort);
+            var completedTask = await Task.WhenAny(connectTask!, Task.Delay(TimeoutMs, cts.Token));
+            if (completedTask != connectTask || _tcpClient == null || !_tcpClient.Connected)
             {
-                TcpClient client = new(ServerIP ?? "", Port);
-                string recv = "";
-                using NetworkStream stream = client.GetStream();
-                byte[] buffer = Encoding.ASCII.GetBytes(data + '\0');
-                stream.Write(buffer, 0, buffer.Length);
-
-                bool isRecv = false;
-                if (GetResponse)
+                SysLog.Add(LogLevel.Error, "通訊異常:連線逾時");
+                return;
+            }
+            SysLog.Add(LogLevel.Info, "頻譜儀連線成功");
+        }
+        public async Task ClearReadBuffer(CancellationToken token = default)
+        {
+            int timeOut = 3000;
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(timeOut);
+            await _asyncLock.WaitAsync();
+            NetworkStream stream = _tcpClient!.GetStream();
+            try
+            {
+                // 嘗試連線
+                stream.ReadTimeout = timeOut;
+                stream.WriteTimeout = timeOut;
+                DateTime t_start = DateTime.Now;
+                while(!cts.IsCancellationRequested)
                 {
-                    CountRespTimeOut = 0;
-                    while (!isRecv)
-                    {
-                        if (CheckInterrupt?.Invoke() ?? false)
-                            return;
-                        byte[] response = new byte[256];
-                        Array.Clear(response, 0, response.Length);
-                        try
-                        {
-                            stream.ReadTimeout = 1500;
-                            int bytes = stream.Read(response, 0, response.Length);
-                            isRecv = true;
-                            recv = Encoding.ASCII.GetString(response, 0, bytes);
-                            OnDataReceived?.Invoke(recv);
-                        }
-                        catch (Exception)
-                        {
-                            CountRespTimeOut++;
-                        }
-                    }
-                    stream.Close();
-                    client.Close();
+                    Thread.Sleep(200);
+                    if ((DateTime.Now - t_start).TotalMilliseconds > timeOut)
+                        break;
+                    if (!stream.DataAvailable)
+                        continue;
+                    // 等待回應
+                    byte[] recvBuffer = new byte[2048];
+                    int bytesRead = await ReadWithTimeoutAsync(stream, recvBuffer, cts.Token, false);
                 }
-            });
-        }
-    }
-    [AddINotifyPropertyChangedInterface]
-    public class TCPReceiver
-    {
-        public const int BufferSize = 4096;
-        public int Port { get; set; } = 33456;
-        public Action<string>? OnRecvCommand { get; set; }
-        private TcpClient? Client { get; set; }
-        public void Start()
-        {
-            Task.Run(Main);
-        }
-        async Task Main()
-        {
-            TcpListener server = new TcpListener(IPAddress.Any, Port);
-            server.Start();
-            while (true)
+            }
+            catch (Exception)
             {
-                Client = await server.AcceptTcpClientAsync();
-                _ = HandleClientAsync(Client);
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+        }
+        public async Task<string> SendAndReceiveAsync(string message, CancellationToken token = default)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(TimeoutMs);
+            await _asyncLock.WaitAsync();
+            try
+            {
+                if (!_tcpClient.Connected)
+                {
+                    await ConnectAsync(token);
+                }
+                // 嘗試連線
+                NetworkStream stream = _tcpClient!.GetStream();
+                stream.ReadTimeout = TimeoutMs;
+                stream.WriteTimeout = TimeoutMs;
+
+                // 發送訊息
+                byte[] sendBuffer = Encoding.UTF8.GetBytes(message);
+                await stream.WriteAsync(sendBuffer, cts.Token);
+
+                // 等待回應
+                byte[] recvBuffer = new byte[2048];
+                int bytesRead = await ReadWithTimeoutAsync(stream, recvBuffer, cts.Token);
+                if (bytesRead <= 0)
+                    return "";
+
+                return Encoding.UTF8.GetString(recvBuffer, 0, bytesRead);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("操作逾時");
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+        }
+        public async Task<string[]> SendAndReceiveSequenceAsync(string message, int recCount, CancellationToken token = default)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+            cts.CancelAfter(TimeoutMs);
+            await _asyncLock.WaitAsync();
+            List<string> results = [];
+            try
+            {
+                if (!_tcpClient.Connected)
+                    await ConnectAsync(token);
+                NetworkStream stream = _tcpClient!.GetStream();
+                stream.ReadTimeout = TimeoutMs;
+                stream.WriteTimeout = TimeoutMs;
+
+                // 發送訊息
+                byte[] sendBuffer = Encoding.UTF8.GetBytes(message);
+                await stream.WriteAsync(sendBuffer, cts.Token);
+                for (int i = 0; i < recCount; i++)
+                {
+                    // 等待回應
+                    byte[] recvBuffer = new byte[2048];
+                    int bytesRead = await ReadWithTimeoutAsync(stream, recvBuffer, cts.Token);
+                    if (bytesRead <= 0)
+                        return [];
+                    results.Add(Encoding.UTF8.GetString(recvBuffer, 0, bytesRead));
+                }
+                return results.ToArray();
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException("操作逾時");
+            }
+            finally
+            {
+                _asyncLock.Release();
             }
         }
 
-        async Task HandleClientAsync(TcpClient client)
+        private async Task<int> ReadWithTimeoutAsync(NetworkStream stream, byte[] buffer, CancellationToken token, bool IsLog = true)
         {
             try
             {
-                using NetworkStream stream = client.GetStream();
-                byte[] buffer = new byte[BufferSize]; // 限制最大字串長度為128
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeoutCts.CancelAfter(TimeoutMs);
 
-                int bytesRead;
-                while ((bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                {
-                    string receivedData = Encoding.ASCII.GetString(buffer, 0, bytesRead);
-                    OnRecvCommand?.Invoke(receivedData);
-                }
-            }catch(Exception e)
-            {
-                SysLog.Add(LogLevel.Error,"TCP接收錯誤:"+ e.Message);
-            }
-        }
-        // 新增發送資料方法
-        public async Task SendData(string data)
-        {
-            try
-            {
-                if (Client == null)
-                    return;
-                byte[] buffer = Encoding.ASCII.GetBytes(data);
-                NetworkStream stream = Client.GetStream();
-                await stream.WriteAsync(buffer, 0, buffer.Length);
-                await stream.FlushAsync();
+                var readTask = stream.ReadAsync(buffer, 0, buffer.Length, timeoutCts.Token);
+                var completed = await Task.WhenAny(readTask, Task.Delay(TimeoutMs, timeoutCts.Token));
+                if (completed != readTask)
+                    throw new TimeoutException("接收逾時");
+                return await readTask;
             }
             catch (Exception e)
             {
-                SysLog.Add(LogLevel.Error, "TCP發送錯誤:" + e.Message);
+                if(IsLog)
+                    SysLog.Add(LogLevel.Error, $"通訊異常:{e.Message}");
+                return -1;
             }
+            finally
+            {
+            }
+        }
+
+        public void Disconnect(TcpClient? _tcpClient)
+        {
+            try
+            {
+                _tcpClient?.Close();
+                _tcpClient?.Dispose();
+            }
+            catch { }
         }
     }
 }

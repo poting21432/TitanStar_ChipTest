@@ -1,11 +1,14 @@
 ﻿using DeviceDB;
+using Keysight.Visa;
 using PLC;
 using PropertyChanged;
 using Support;
 using Support.Data;
 using Support.Logger;
+using Support.Net;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
@@ -19,13 +22,15 @@ namespace WpfApp_TestVISA
     [AddINotifyPropertyChangedInterface]
     public static class Global
     {
+        public static Process? ProcessBurn { get; set; }
         public static Dictionary<string, Config> Configs { get; set; } = new();
         public static Dictionary<string, PLCAddr> PLCAddrs { get; set; } = new();
         public static Dictionary<string, Config> BATPath { get; set; } = new();
-
+        internal static string KeysightDeviceIP = "";
         public static int PLCDelayMs { get; set; } = 50;
         public static int ModbusDelayMs { get; set; } = 500;
 
+        public static CancellationTokenSource CtsTCP = new CancellationTokenSource();
         public static int PLCStationID { get; set; } = 0;
         public static PLCHandler PLC = new();
         public static string CurrentBurnBATPath { get; set; } ="";
@@ -34,11 +39,12 @@ namespace WpfApp_TestVISA
 
         public static bool IsInitialized = false;
 
+        internal static TCPCommand TcpCommand { get; set; }
+
         public static Model_Main? MMain { get; set; } = null;
         public static void Initialize()
         {
-
-            Task.Run(() =>
+            _ = Task.Run(() =>
             {
                 InitializeConfig();
                 Task.Run(() =>
@@ -64,8 +70,17 @@ namespace WpfApp_TestVISA
                 };
                 SysLog.Add(LogLevel.Info, $"使用電表序列埠:{PowerMeterSerialPort}");
 
-                foreach(var path in BATPath.Values)
+                foreach (var path in BATPath.Values)
                     SysLog.Add(LogLevel.Info, $"{path.Title}:{path.Value}");
+                KeysightDeviceIP = Configs["KeysightDeviceIP"].Value ?? "";
+                Task.Run(async() =>
+                {
+                    SysLog.Add(LogLevel.Info, "頻譜儀連線中");
+                    TcpCommand = new(KeysightDeviceIP, 5023);
+                    await TcpCommand.ConnectAsync();
+                    await TcpCommand.SendAndReceiveAsync("*IDN?\r\n");
+                    await TcpCommand.ClearReadBuffer(CtsTCP.Token);
+                });
                 IsInitialized = true;
             });
             //*
