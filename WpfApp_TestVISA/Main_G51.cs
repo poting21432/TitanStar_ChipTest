@@ -15,27 +15,29 @@ namespace WpfApp_TestVISA
 {
     public partial class Model_Main
     {
-        public ProcedureState BurnState { get; set; } = new("燒錄程序");
-        public ProcedureState TestState { get; set; } = new("測試程序");
-
+        public ProcedureState G51BurnState { get; set; } = new("G51燒錄程序");
+        public ProcedureState G51TestState { get; set; } = new("G51測試程序");
+        public ProcedureState ZBRTBurnState { get; set; } = new("ZBRT燒錄程序");
+        public ProcedureState ZBRTTestState { get; set; } = new("ZBRT測試程序");
         internal static readonly string[] StrSteps_G51 = [
             "等待產品到位", "等待開關汽缸到位", "3V導通 LED閃爍檢測",
             "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
             "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
             "測試開關 - LED檢測", "頻譜儀天線強度測試","3V,uA 電表測試", "完成並記錄資訊"
         ];
-        public void ProcedureMain_G51()
+        public void ProcedureTest_G51()
         {
-            ProcedureState PState = TestState;
+            ProcedureState PState = G51TestState;
             if (PState.IsBusy)
             {
                 SysLog.Add(LogLevel.Warning, $"{PState.Title}正在執行，先終止後重啟");
                 return;
             }
+            PState.SetStart();
             ResetSteps();
             Instructions.Clear();
             NextStep(); //->"等待到位"
-            //*
+            /*
             string memReady = "G51_Signal_Ready".GetPLCMem();
             Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
@@ -80,7 +82,7 @@ namespace WpfApp_TestVISA
             });
             Instructions.Add(new(2, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_DN, (short)1, 2000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"確認汽缸在下定位 {sen_cyUD_DN} == 1"),
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查升降汽缸:下定位 {sen_cyUD_DN} == 1"),
                 OnEnd = (Ins) => {
                     if (Ins.ExcResult == ExcResult.Success)
                     {
@@ -390,15 +392,8 @@ namespace WpfApp_TestVISA
             Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
             {
                 OnStart = async (Ins) => {
-                    await Global.TcpCommand.SendAndReceiveSequenceAsync("*RST\r\n", 2);
-                    SysLog.Add(LogLevel.Info, "頻譜儀重置");
-                    Thread.Sleep(1000);
-                    await Global.TcpCommand.SendAndReceiveSequenceAsync("*RCL 1\r\n", 2);
-                    SysLog.Add(LogLevel.Info, "頻譜儀切換程序(Recall):1");
-                    Thread.Sleep(500);
-                    await Global.TcpCommand.SendAndReceiveSequenceAsync(":INIT:CONT OFF\r\n", 2);
-                    SysLog.Add(LogLevel.Warning, "頻譜儀準備完成");
-                    Ins.ExcResult = ExcResult.Success;
+                    bool isP = await PrepareRF();
+                    Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
                 },
             };
             Instructions.Add(new(44, $"2.4V導通 {v_low} -> 1", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
@@ -478,20 +473,8 @@ namespace WpfApp_TestVISA
                 OnStart = async (Ins) =>
                 {
                     NextStep();  //"頻譜儀天線強度測試"
-                    Thread.Sleep(500);
-                    await Global.TcpCommand.SendAndReceiveAsync(":ABOR\r\n");
-                    SysLog.Add(LogLevel.Info, "讀取開始");
-
-                    string[] ret = await Global.TcpCommand.SendAndReceiveSequenceAsync(":FETC:BPOW?\r\n", 3);
-                    if (ret.Length >= 3)
-                    {
-                        string[] data = ret[2].Split(',');
-                        double rf_out = data[2].ToDouble();
-                        SysLog.Add(LogLevel.Info, $"頻譜儀回應: 輸出{rf_out:F3} dBm");
-                        DispMain?.Invoke(() => CurrentProduct!.TestAntenna = $"{rf_out:F3}dBm");
-                        Ins.ExcResult = ExcResult.Success;
-                    }
-                    else Ins.ExcResult = ExcResult.Error;
+                    double value = await ReadRFValue();
+                    Ins.ExcResult = double.IsNaN(value) ? ExcResult.Error : ExcResult.Success;
                 },
             });
 
@@ -587,7 +570,7 @@ namespace WpfApp_TestVISA
             //M3013 -> 0 復歸
             Instructions.Add(new(51, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"確認汽缸在上定位 {sen_cyUD_UP} == 1"),
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查升降汽缸:上定位  {sen_cyUD_UP} == 1"),
                 OnEnd = (Ins) => {
                     if (Ins.ExcResult == ExcResult.Success)
                     {
@@ -633,17 +616,13 @@ namespace WpfApp_TestVISA
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
-                PState.SetStart();
 
                 foreach (Instruction ins in Instructions)
                 {
                     if (PState.IsCompleted) //錯誤發生提前結束
-                    {
-
                         return;
-                    }
                      
-                    "流程".TryCatch(() =>
+                    bool ex = "流程".TryCatch(() =>
                     {
                         if (PState.IsModeStep)
                         {
@@ -654,7 +633,7 @@ namespace WpfApp_TestVISA
                         }
                         if (PState.IsReseting || PState.IsStop)
                         {
-                            PState.SetEnd(StateID: 3);
+                            PState.SetEnd(ExcResult.Abort);
                             return;
                         }
                         int id = ins.ID ?? -1;
@@ -663,29 +642,35 @@ namespace WpfApp_TestVISA
                         PState.SignalNext = false;
                         if (ins != null && ins.ExcResult != ExcResult.Success)
                         {
-                            PState.SetEnd(StateID: 2);
+                            PState.SetEnd(ins.ExcResult);
                             return;
                         }
-                    }, () => PState.SetEnd(StateID: 2));
+                    });
+                    if (!ex)
+                    {
+                        PState.SetEnd(ExcResult.Error);
+                        return;
+                    }
                 }
                 //Normal
-                PState.SetEnd(StateID: 1);
+                PState.SetEnd(ExcResult.Success);
             });
         }
         public void ProcedureBurn_G51()
         {
-            ProcedureState PState = BurnState;
+            ProcedureState PState = G51BurnState;
             if (PState.IsBusy)
             {
                 SysLog.Add(LogLevel.Warning, $"{PState.Title}正在執行，先終止後重啟");
                 return;
             }
+            PState.SetStart();
             string sen_cyUD_DN = "G51_Sensor_CyBUD_DN".GetPLCMem();//M4011
             string sen_cyUD_UP = "G51_Sensor_CyBUD_UP".GetPLCMem();//M4010
             string cyl_UD_UP = "G51_Cylinder_BUD_UP".GetPLCMem();//M3020
             string cyl_UD_DN = "G51_Cylinder_BUD_DN".GetPLCMem();//M3021
             InstructionsBurn.Clear();
-            //*
+            /*
             string memReady = "G51_Burn_Ready".GetPLCMem();
             InstructionsBurn.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
@@ -696,7 +681,7 @@ namespace WpfApp_TestVISA
             });//*/
             InstructionsBurn.Add(new(1, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_DN, (short)1, 2000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"確認汽缸在下定位 {sen_cyUD_DN} == 1"),
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:下定位  {sen_cyUD_DN} == 1"),
                 OnEnd = (Ins) => {
                     if (Ins.ExcResult == ExcResult.Success)
                     {
@@ -776,7 +761,7 @@ namespace WpfApp_TestVISA
             });
             InstructionsBurn.Add(new(3, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"確認燒錄升降汽缸在上定位 {sen_cyUD_UP} == 1"),
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:上定位  {sen_cyUD_UP} == 1"),
                 OnEnd = (Ins) => {
                     if (Ins.ExcResult == ExcResult.Success)
                     {
@@ -822,13 +807,12 @@ namespace WpfApp_TestVISA
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
-                PState.SetStart();
 
                 foreach (Instruction ins in InstructionsBurn)
                 {
                     if (PState.IsCompleted)
                         return;
-                    "燒錄流程".TryCatch(() =>
+                    bool ex = "燒錄流程".TryCatch(() =>
                     {
                         if (PState.IsModeStep)
                         {
@@ -839,7 +823,7 @@ namespace WpfApp_TestVISA
                         }
                         if (PState.IsReseting || PState.IsStop)
                         {
-                            PState.SetEnd(StateID: 3);
+                            PState.SetEnd(ExcResult.Abort);
                             return;
                         }
                         int id = ins.ID ?? -1;
@@ -848,21 +832,26 @@ namespace WpfApp_TestVISA
                         PState.SignalNext = false;
                         if (ins != null && ins.ExcResult != ExcResult.Success)
                         {
-                            PState.SetEnd(StateID: 2);
+                            PState.SetEnd(ins.ExcResult);
                             return;
                         }
-                    }, () => PState.SetEnd(StateID: 2));
+                    });
+                    if(!ex)
+                    {
+                        PState.SetEnd(ExcResult.Error);
+                        return;
+                    }
                 }
                 //Normal
-                PState.SetEnd(StateID: 1);
+                PState.SetEnd(ExcResult.Success);
             });
         }
         public void ProcedureG51ResetTest()
         {
-            ProcedureState PState = TestState;
+            ProcedureState PState = G51TestState;
             if (PState.IsReseting)
             {
-                SysLog.Add(LogLevel.Warning, $"{PState}正在終止復歸");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
                 return;
             }
             PState.IsReseting = true;
@@ -887,18 +876,18 @@ namespace WpfApp_TestVISA
 
             "終止復歸".TryCatch(() =>
             {
-                SysLog.Add(LogLevel.Warning, $"等待{PState.Title}結束...");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
                 while (PState.IsBusy)
                     Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Info, $"確認{PState.Title}終止，復歸中...");
-                SysLog.Add(LogLevel.Warning, "電壓源復歸...");
+                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸...");
                 //電路
                 Global.PLC.WriteRandomData([v_low ,v5_pos, v5_neg], [0, 0, 0]);
                 Global.PLC.WriteRandomData([v3_pos, v3_neg, v3_prb], [0, 0, 0]);
                 DispMain?.Invoke(() => G51_Supply = "OFF");
                 Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Warning, "電壓源復歸完成");
-                SysLog.Add(LogLevel.Warning, "IO復歸...");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸完成");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸...");
                 //汽缸
                 Global.PLC.WriteOneData(cyl_reed, 0);
                 Global.PLC.WriteOneData(cyl_switchTest, 0);
@@ -907,28 +896,27 @@ namespace WpfApp_TestVISA
                 //開關
                 Global.PLC.WriteRandomData([pin_DIO, pin_switch1, pin_switch2], [0, 0, 0]);
                 Thread.Sleep(500);
-                SysLog.Add(LogLevel.Warning, "IO復歸完成");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸完成");
 
                 if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
                 {
-                    SysLog.Add(LogLevel.Warning, "升降汽缸復歸...");
-                    SysLog.Add(LogLevel.Info, "確認升降汽缸在上定位");
-                    Global.PLC.WriteRandomData([cyl_UD_UP,cyl_UD_DN], [0 ,0]);
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認汽缸在上定位");
+                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0 ,0]);
                     Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Info, $"升降汽缸下降...");
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
                     Global.PLC.WriteOneData(cyl_UD_DN, 1);
                     Thread.Sleep(500);
                     while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
                         Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Info, $"確認升降汽缸已在下定位");
                     Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
-                    SysLog.Add(LogLevel.Info, "升降汽缸下降復歸完成");
                 }
                 DispMain?.Invoke(() =>
                 {
                     PState.BrushState = Brushes.Transparent;
                 });
             }, () => PState.IsReseting = false);
+            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
+            SysLog.Add(LogLevel.Info, $"{PState.Title}:復歸完成");
         }
         public void ProcedureG51ResetBurn()
         {
@@ -937,10 +925,10 @@ namespace WpfApp_TestVISA
             string cyl_UD_UP = "G51_Cylinder_BUD_UP".GetPLCMem();//M3020
             string cyl_UD_DN = "G51_Cylinder_BUD_DN".GetPLCMem();//M3021
 
-            ProcedureState PState = BurnState;
+            ProcedureState PState = G51BurnState;
             if (PState.IsReseting)
             {
-                SysLog.Add(LogLevel.Warning, $"{PState}正在終止復歸");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
                 return;
             }
             PState.IsReseting = true;
@@ -949,26 +937,25 @@ namespace WpfApp_TestVISA
             {
                 if (PState.IsBusy && Global.ProcessBurn != null)
                     Global.ProcessBurn.Kill();
-                SysLog.Add(LogLevel.Warning, $"等待{PState.Title}結束...");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
                 while (PState.IsBusy)
                     Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Info, $"確認{PState.Title}終止，復歸中...");
+                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
                 if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
                 {
-                    SysLog.Add(LogLevel.Warning, "升降汽缸復歸...");
-                    SysLog.Add(LogLevel.Info, "確認升降汽缸在上定位");
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在上定位");
                     Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
                     Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Info, $"升降汽缸下降...");
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
                     Global.PLC.WriteOneData(cyl_UD_DN, 1);
                     Thread.Sleep(500);
                     while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
                         Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Info, $"確認升降汽缸已在下定位");
                     Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
-                    SysLog.Add(LogLevel.Info, "升降汽缸下降復歸完成");
                 }
             }, () => PState.IsReseting = false);
+            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
+            SysLog.Add(LogLevel.Warning, $"{PState.Title}:復歸完成");
         }
     }
 }

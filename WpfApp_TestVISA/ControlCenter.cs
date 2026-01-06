@@ -6,6 +6,7 @@ using Support;
 using Support.Data;
 using Support.Logger;
 using Support.Net;
+using Support.ThreadHelper;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -23,26 +24,27 @@ namespace WpfApp_TestVISA
     public static class Global
     {
         public static Process? ProcessBurn { get; set; }
-        public static Dictionary<string, Config> Configs { get; set; } = new();
-        public static Dictionary<string, PLCAddr> PLCAddrs { get; set; } = new();
-        public static Dictionary<string, Config> BATPath { get; set; } = new();
+        public static Dictionary<string, Config> Configs { get; set; } = [];
+        public static Dictionary<string, PLCAddr> PLCAddrs { get; set; } = [];
+        public static Dictionary<string, Config> BATPath { get; set; } = [];
         internal static string KeysightDeviceIP = "";
+        internal static int KeysightDevicePort = 5023;
         public static int PLCDelayMs { get; set; } = 50;
         public static int ModbusDelayMs { get; set; } = 500;
 
         public static CancellationTokenSource CtsTCP = new CancellationTokenSource();
         public static int PLCStationID { get; set; } = 0;
-        public static PLCHandler PLC = new();
+        internal static PLCHandler PLC = new();
         public static string CurrentBurnBATPath { get; set; } ="";
         public static string? PowerMeterSerialPort { get; set; }
         public static SerialPort? ModbusPort{ get; set; }
 
         public static bool IsInitialized = false;
-
-        internal static TCPCommand TcpCommand { get; set; }
-
+        
+        internal static TCPCommand? TcpCommand { get; set; }
         public static Model_Main? MMain { get; set; } = null;
-        public static void Initialize()
+
+       public static void Initialize()
         {
             _ = Task.Run(() =>
             {
@@ -73,14 +75,8 @@ namespace WpfApp_TestVISA
                 foreach (var path in BATPath.Values)
                     SysLog.Add(LogLevel.Info, $"{path.Title}:{path.Value}");
                 KeysightDeviceIP = Configs["KeysightDeviceIP"].Value ?? "";
-                Task.Run(async() =>
-                {
-                    SysLog.Add(LogLevel.Info, "頻譜儀連線中");
-                    TcpCommand = new(KeysightDeviceIP, 5023);
-                    await TcpCommand.ConnectAsync();
-                    await TcpCommand.SendAndReceiveAsync("*IDN?\r\n");
-                    await TcpCommand.ClearReadBuffer(CtsTCP.Token);
-                });
+                KeysightDevicePort = Configs["KeysightDevicePort"].Value?.ToInt() ?? 5023;
+                Task.Run(async () => await LinkSignalAnalyzer());
                 IsInitialized = true;
             });
             //*
@@ -88,12 +84,13 @@ namespace WpfApp_TestVISA
             {
                 while (!IsInitialized)
                     Thread.Sleep(1000);
+                string mem_pType = "ProductType".GetPLCMem();
                 while (true)
                 {
                     Thread.Sleep(1000);
                     "產品檢測".TryCatch(() =>
                     {
-                        short productType = PLC.ReadOneData("D3101").ReturnValue;
+                        short productType = PLC.ReadOneData(mem_pType).ReturnValue;
                         Model_Main.DispMain?.Invoke(() =>
                         {
                             if (MMain == null)
@@ -112,6 +109,24 @@ namespace WpfApp_TestVISA
                     });
                 }
             });//*/
+        }
+        internal static async Task<bool>LinkSignalAnalyzer()
+        {
+            if (TcpCommand != null && (TcpCommand.IsConnected ?? false))
+                return true;
+
+            SysLog.Add(LogLevel.Info, "頻譜儀連線中");
+            TcpCommand = new(KeysightDeviceIP, KeysightDevicePort);
+            bool isC = await TcpCommand.ConnectAsync(CtsTCP.Token);
+            if(isC)
+            {
+                Thread.Sleep(500);
+                string[] recv = await TcpCommand.SendAndReceiveTokenAsync("*IDN?\r\n", "SCPI", CtsTCP.Token);
+                string[] info = recv[0].Replace("\n", "").Trim().Split("\r");
+                if(info.Length >= 3)
+                    SysLog.Add(LogLevel.Info, $"頻譜儀型號:{info[2]}");
+            }
+            return isC;
         }
         static void InitializeConfig()
         {
@@ -166,7 +181,7 @@ namespace WpfApp_TestVISA
             aes.Key = key;
 
             // 取出前 16 byte 為 IV
-            byte[] iv = allData.Take(16).ToArray();
+            byte[] iv = [.. allData.Take(16)];
             aes.IV = iv;
 
             using MemoryStream ms = new(allData.Skip(16).ToArray());

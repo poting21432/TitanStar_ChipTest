@@ -65,41 +65,45 @@
                     </CheckBox.LayoutTransform>
                 </CheckBox>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="10 5">
-                <Button Content="燒錄流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_BurnSequence}"/>
-                <Button Content="燒錄終止復歸" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_BurnReset}"/>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0 5">
-                <Button Content="燒錄步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepBurn}"/>
-                <CheckBox Content="步進模式" IsChecked="{Binding BurnState.IsModeStep}" Margin="10 0"/>
-                <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
-                <Ellipse Width="30" Height="30" StrokeThickness="3"
-                         Stroke="White" Fill="{Binding BurnState.BrushState}"/>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="10 5">
-                <Button Content="測試流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
-                <Button Content="測試終止復歸" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_MainReset}"/>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0 5">
-                <Button Content="測試步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepTest}"/>
-                <CheckBox Content="步進模式" IsChecked="{Binding TestState.IsModeStep}" Margin="10 0"/>
-                <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
-                <Ellipse Width="30" Height="30" StrokeThickness="3"
-         Stroke="White" Fill="{Binding TestState.BrushState}"/>
-            </StackPanel>
-            <StackPanel Visibility="Collapsed" Orientation="Horizontal" Margin="10">
-                <Button Content="跳過目前步驟" FontSize="30" Width="240" Height="50"/>
-                <Button Content="取消生產" FontSize="30" Width="240" Height="50" Margin="10 0"/>
-            </StackPanel>
-            <StackPanel Visibility="Collapsed">
-                <TextBlock Text="左側選擇產品指定測試項目" FontSize="35" Margin="10 0"/>
-                <StackPanel Orientation="Horizontal" Margin="10">
-                    <ComboBox ItemsSource="{Binding AssignedTests}" SelectedItem="{Binding AssignedTest}"
-               Width="320" Margin="10 0"/>
-                    <Button Content="開始測試" Height="40" Width="150"/>
+            <StackPanel IsEnabled="{Binding IsManualMode}">
+                <StackPanel Orientation="Horizontal" Margin="10 5">
+                    <Button Content="燒錄流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_BurnSequence}"/>
+                    <Button Content="終止" Width="120" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_BurnStop}"/>
+                    <Button Content="復歸" Width="120" FontSize="30" Height="45" Command="{Binding Command_BurnReset}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0 5">
+                    <Button Content="燒錄步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepBurn}"/>
+                    <CheckBox Content="步進模式" IsChecked="{Binding BurnState.IsModeStep}" Margin="10 0"/>
+                    <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
+                    <Ellipse Width="30" Height="30" StrokeThickness="3"
+                Stroke="White" Fill="{Binding BurnState.BrushState}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="10 5">
+                    <Button Content="測試流程開始" Width="200" FontSize="30" Height="45" Command="{Binding Commnad_MainSequence}"/>
+                    <Button Content="終止" Width="120" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_TestStop}"/>
+                    <Button Content="復歸" Width="120" FontSize="30" Height="45" Command="{Binding Command_TestReset}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0 5">
+                    <Button Content="測試步進" Width="200" Margin="10 0" FontSize="30" Height="45" Command="{Binding Command_NextStepTest}"/>
+                    <CheckBox Content="步進模式" IsChecked="{Binding TestState.IsModeStep}" Margin="10 0"/>
+                    <TextBlock Text="狀態" VerticalAlignment="Center" Margin="10 0"/>
+                    <Ellipse Width="30" Height="30" StrokeThickness="3"
+Stroke="White" Fill="{Binding TestState.BrushState}"/>
+                </StackPanel>
+                <StackPanel Visibility="Collapsed" Orientation="Horizontal" Margin="10">
+                    <Button Content="跳過目前步驟" FontSize="30" Width="240" Height="50"/>
+                    <Button Content="取消生產" FontSize="30" Width="240" Height="50" Margin="10 0"/>
+                </StackPanel>
+                <StackPanel Visibility="Collapsed">
+                    <TextBlock Text="左側選擇產品指定測試項目" FontSize="35" Margin="10 0"/>
+                    <StackPanel Orientation="Horizontal" Margin="10">
+                        <ComboBox ItemsSource="{Binding AssignedTests}" SelectedItem="{Binding AssignedTest}"
+      Width="320" Margin="10 0"/>
+                        <Button Content="開始測試" Height="40" Width="150"/>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
-           
+            
             <GroupBox Header="作業流程" Width="500"
                 FontSize="35" Margin="5 10"  Grid.Column="0">
                 <ItemsControl ItemsSource="{Binding StepsData}">
@@ -107,7 +111,7 @@
                         <DataTemplate DataType="{x:Type wpf:StepData}">
                             <StackPanel Orientation="Horizontal" Height="45" VerticalAlignment="Center">
                                 <wpf:UserControl_StatusIndicator FontSize="20" Width="25" Height="25" Status="{Binding DataContext.Status, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType=ContentPresenter}}"
-                        VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    VerticalAlignment="Center" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding Title}" FontSize="30" Foreground="{Binding ColorBrush}" Margin="5" Width="300"/>
                                 <TextBlock Text="{Binding TimeTag}" FontSize="25" VerticalAlignment="Center" Width="90" Foreground="{Binding ColorBrush}" Margin="5"/>
                             </StackPanel>
@@ -198,8 +202,6 @@
                 </DataGrid.Columns>
             </DataGrid>
         </StackPanel>
-        
-       
     </StackPanel>
    
 </Window>

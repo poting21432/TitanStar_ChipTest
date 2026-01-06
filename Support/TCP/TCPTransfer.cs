@@ -13,6 +13,7 @@ namespace Support.Net
 {
     public class TCPCommand(string serverIp, int serverPort)
     {
+        public bool? IsConnected => _tcpClient.Connected;
         public string ServerIp { get; set; } = serverIp;
         public int ServerPort { get; set; } = serverPort;
         public int TimeoutMs { get; set; } = 30000;
@@ -22,7 +23,7 @@ namespace Support.Net
         /// <summary>
         /// 傳送一個訊息給 Server 並等待回應一次
         /// </summary>
-        public async Task ConnectAsync(CancellationToken token = default)
+        public async Task<bool> ConnectAsync(CancellationToken token = default)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             _tcpClient = new();
@@ -30,14 +31,15 @@ namespace Support.Net
             var completedTask = await Task.WhenAny(connectTask!, Task.Delay(TimeoutMs, cts.Token));
             if (completedTask != connectTask || _tcpClient == null || !_tcpClient.Connected)
             {
-                SysLog.Add(LogLevel.Error, "通訊異常:連線逾時");
-                return;
+                SysLog.Add(LogLevel.Error, "頻譜儀通訊異常:連線逾時");
+                return false;
             }
             SysLog.Add(LogLevel.Info, "頻譜儀連線成功");
+            return true;
         }
         public async Task ClearReadBuffer(CancellationToken token = default)
         {
-            int timeOut = 3000;
+            int timeOut = 500;
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
             cts.CancelAfter(timeOut);
             await _asyncLock.WaitAsync();
@@ -105,16 +107,55 @@ namespace Support.Net
                 _asyncLock.Release();
             }
         }
-        public async Task<string[]> SendAndReceiveSequenceAsync(string message, int recCount, CancellationToken token = default)
+        public async Task<string[]> SendAndReceiveTokenAsync(string message, string token,
+            CancellationToken cToken = default, int timeOutMs = 10000)
         {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-            cts.CancelAfter(TimeoutMs);
-            await _asyncLock.WaitAsync();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cToken);
+            cts.CancelAfter(timeOutMs);
+            await _asyncLock.WaitAsync(cToken);
             List<string> results = [];
             try
             {
                 if (!_tcpClient.Connected)
-                    await ConnectAsync(token);
+                    await ConnectAsync(cToken);
+                NetworkStream stream = _tcpClient!.GetStream();
+                stream.ReadTimeout = TimeoutMs;
+                stream.WriteTimeout = TimeoutMs;
+
+                // 發送訊息
+                byte[] sendBuffer = Encoding.UTF8.GetBytes(message);
+                await stream.WriteAsync(sendBuffer, cts.Token);
+                while (true)
+                {
+                    // 等待回應
+                    byte[] recvBuffer = new byte[2048];
+                    int bytesRead = await ReadWithTimeoutAsync(stream, recvBuffer, cts.Token);
+                    if (bytesRead <= 0)
+                        return [..results];
+                    string data = Encoding.UTF8.GetString(recvBuffer, 0, bytesRead);
+                    results.Add(data);
+                    if (data.Contains(token))
+                        return [..results];
+                }
+            }catch (OperationCanceledException)
+            {
+                throw new TimeoutException("操作逾時");
+            }
+            finally
+            {
+                _asyncLock.Release();
+            }
+        }
+        public async Task<string[]> SendAndReceiveSequenceAsync(string message, int recCount, CancellationToken cToken = default)
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cToken);
+            cts.CancelAfter(TimeoutMs);
+            await _asyncLock.WaitAsync(cToken);
+            List<string> results = [];
+            try
+            {
+                if (!_tcpClient.Connected)
+                    await ConnectAsync(cToken);
                 NetworkStream stream = _tcpClient!.GetStream();
                 stream.ReadTimeout = TimeoutMs;
                 stream.WriteTimeout = TimeoutMs;
@@ -133,9 +174,10 @@ namespace Support.Net
                 }
                 return results.ToArray();
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException cEx)
             {
-                throw new TimeoutException("操作逾時");
+                SysLog.Add(LogLevel.Error, $"通訊異常:{cEx.Message}");
+                return [];
             }
             finally
             {
@@ -167,7 +209,7 @@ namespace Support.Net
             }
         }
 
-        public void Disconnect(TcpClient? _tcpClient)
+        public void Disconnect()
         {
             try
             {

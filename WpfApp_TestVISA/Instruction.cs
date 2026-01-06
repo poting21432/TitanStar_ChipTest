@@ -175,6 +175,8 @@ namespace WpfApp_TestVISA
             if (port.IsOpen)
                 port.Close();
             port.Open();
+            port.WriteTimeout = 1000;
+            port.ReadTimeout = 1000;
             byte slaveId = 1;
             var master = ModbusSerialMaster.CreateRtu(port);
             master.WriteMultipleRegisters(slaveId, regAddr, [value]);
@@ -201,6 +203,8 @@ namespace WpfApp_TestVISA
             if (port.IsOpen)
                 port.Close();
             port.Open();
+            port.WriteTimeout = 1000;
+            port.ReadTimeout = 1000;
             byte slaveId = 1;
             regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
             port.Close();
@@ -235,6 +239,8 @@ namespace WpfApp_TestVISA
             if (port.IsOpen)
                 port.Close();
             port.Open();
+            port.WriteTimeout = 1000;
+            port.ReadTimeout = 1000;
             DateTime startT = DateTime.Now;
             while (!AbortSignal)
             {
@@ -274,21 +280,25 @@ namespace WpfApp_TestVISA
             if (port.IsOpen)
                 port.Close();
             port.Open();
+            port.WriteTimeout = 1000;
+            port.ReadTimeout = 1000;
             DateTime t_start = DateTime.Now;
 
             while((DateTime.Now - t_start).TotalMilliseconds < timeOut)
             {
-                Thread.Sleep(300);
+                Thread.Sleep(500);
                 byte slaveId = 1;
                 regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
-                port.Close();
                 if (regs.Length == 2)
                 {
                     ExcResult = ExcResult.Success;
                     volt = ConvertFloatFromRegisters(regs);
                     Result = volt;
                     if (volt < maxV && volt > minV)
+                    {
+                        port.Close();
                         return ExcResult.Success;
+                    }
                 }
                 else
                 {
@@ -297,6 +307,7 @@ namespace WpfApp_TestVISA
                     Result = null;
                 }
             }
+            port.Close();
             return ExcResult.TimeOut;
         }
         private ExcResult BurnSequence()
@@ -384,6 +395,7 @@ namespace WpfApp_TestVISA
     [AddINotifyPropertyChangedInterface]
     public class ProcedureState(string Title)
     {
+        public ExcResult ExcResult { get; set; } = ExcResult.Null;
         public string Title { get; set; } = Title;
         public SolidColorBrush BrushState { get; set; } = Brushes.Transparent;
         public DateTime? TStart { get;set; }
@@ -418,41 +430,41 @@ namespace WpfApp_TestVISA
             {
                 BrushState = Brushes.Blue;
                 TStart = DateTime.Now;
-                IsBusy = false;
+                IsBusy = true;
                 SignalNext = false;
                 IsStop = false;
                 IsCompleted = false;
             });
         }
-        public void SetEnd(int StateID)
+        public void SetEnd(ExcResult excR)
         {
             double t = (DateTime.Now - TStart)?.TotalSeconds ?? double.NaN;
-            string fstr = ((StateID) switch
+            Model_Main.DispMain?.Invoke(() =>
             {
-                3 => "手動強制",
-                2 => "異常",
-                1 => "正常",
-                _ => throw new NotImplementedException(),
+                string fstr = ((excR) switch
+                {
+                    ExcResult.Abort => "手動強制",
+                    ExcResult.Success => "正常",
+                    _ => "異常",
+                });
+                LogLevel logLevel = ((excR) switch
+                {
+                    ExcResult.Abort => LogLevel.Warning,
+                    ExcResult.Success => LogLevel.Info,
+                    _ => LogLevel.Error,
+                });
+                BrushState = ((excR) switch
+                {
+                    ExcResult.Abort => Brushes.Red,
+                    ExcResult.Success => Brushes.GreenYellow,
+                    _ => Brushes.Red,
+                });
+                SysLog.Add(logLevel, $"程序{fstr}結束，花費時間{t:F2}秒");
+                IsBusy = false;
+                SignalNext = false;
+                IsStop = false;
+                IsCompleted = true;
             });
-            LogLevel logLevel = ((StateID) switch
-            {
-                3 => LogLevel.Warning,
-                2 => LogLevel.Error,
-                1 => LogLevel.Info,
-                _ => throw new NotImplementedException(),
-            });
-            BrushState = ((StateID) switch
-            {
-                3 => Brushes.Red,
-                2 => Brushes.Red,
-                1 => Brushes.GreenYellow,
-                _ => throw new NotImplementedException(),
-            });
-            SysLog.Add(logLevel, $"程序{fstr}結束，花費時間{t:F2}秒");
-            IsBusy = false;
-            SignalNext = false;
-            IsStop = false;
-            IsCompleted = true;
         }
     }
 }

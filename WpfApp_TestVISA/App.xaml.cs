@@ -1,9 +1,11 @@
-﻿using System.ComponentModel;
+﻿using Support;
+using Support.Logger;
+using Support.ThreadHelper;
+using System.ComponentModel;
 using System.Configuration;
 using System.Data;
 using System.Windows;
 using System.Windows.Controls;
-using Support.ThreadHelper;
 namespace WpfApp_TestVISA
 {
     /// <summary>
@@ -19,6 +21,10 @@ namespace WpfApp_TestVISA
         {
             base.OnStartup(e);
             ThreadExtensions.CheckApplicationDuplicated();
+            AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
+            {
+                SysLog.Add(LogLevel.Error, $"程式未預期錯誤: {e}");
+            };
         }
         protected override void RegisterTypes(IContainerRegistry containerRegistry)
         {
