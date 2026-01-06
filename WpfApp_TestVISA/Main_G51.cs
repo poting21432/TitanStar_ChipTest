@@ -1,30 +1,104 @@
 ﻿using Support;
 using Support.Data;
 using Support.Logger;
+using Support.Wpf.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Reflection.Metadata;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace WpfApp_TestVISA
 {
     public partial class Model_Main
     {
+        static readonly Lazy<string> G51_v3_pos = new(() => "G51_Supply_3V+".GetPLCMem()); //M3008
+        static readonly Lazy<string> G51_v3_neg = new(() =>"G51_Supply_3V-".GetPLCMem()); //M3009
+        static readonly Lazy<string> G51_v5_pos = new(() =>"G51_Supply_5V+".GetPLCMem()) ; //M3003
+        static readonly Lazy<string> G51_v5_neg = new(() =>"G51_Supply_5V-".GetPLCMem()); //M3004
+        static readonly Lazy<string> G51_v_low  = new(() =>"G51_Supply_2.4V".GetPLCMem()); //M3011
+        static readonly Lazy<string> G51_v3_prb = new(() => "G51_Supply_3V+Probe".GetPLCMem()); //M3010
         public ProcedureState G51BurnState { get; set; } = new("G51燒錄程序");
         public ProcedureState G51TestState { get; set; } = new("G51測試程序");
-        public ProcedureState ZBRTBurnState { get; set; } = new("ZBRT燒錄程序");
-        public ProcedureState ZBRTTestState { get; set; } = new("ZBRT測試程序");
+        
         internal static readonly string[] StrSteps_G51 = [
-            "等待產品到位", "等待開關汽缸到位", "3V導通 LED閃爍檢測",
+            "等待燒錄到位" ,"燒錄中", "燒錄完成復歸",
+            "等待測試到位", "等待開關汽缸到位", "3V導通 LED閃爍檢測",
             "DIO探針LED檢測", "指撥1 - LED檢測", "指撥2 - LED檢測",
             "蓋開 - LED檢測", "5V,mA 電表測試", "磁簧汽缸 - LED檢測", "2.4V LED閃爍檢測",
             "測試開關 - LED檢測", "頻譜儀天線強度測試","3V,uA 電表測試", "完成並記錄資訊"
         ];
+        #region G51 Related Commands
+        public ICommand? Command_G51_3VON { get; set; }
+        public ICommand? Command_G51_5VON { get; set; }
+        public ICommand? Command_G51_PrbON { get; set; }
+        public ICommand? Command_G51_LowV { get; set; }
+        public ICommand? Command_G51_OFF { get; set; }
+
+        private void InitializeCommands_G51()
+        {
+            Command_G51_3VON = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([G51_v5_pos.Value, G51_v5_neg.Value, G51_v_low.Value, G51_v3_prb.Value], [0, 0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value, G51_v3_neg.Value], [1, 1]);
+                G51_Supply = "3V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            Command_G51_5VON = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([G51_v3_prb.Value, G51_v_low.Value], [0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value, G51_v3_neg.Value, G51_v5_pos.Value, G51_v5_neg.Value], [1, 1, 1, 1]);
+                G51_Supply = "5V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            Command_G51_PrbON = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([G51_v5_pos.Value, G51_v5_neg.Value, G51_v_low.Value], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value, G51_v3_neg.Value, G51_v3_prb.Value], [1, 1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value], [0]);
+                G51_Supply = "探針";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+            Command_G51_LowV = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([G51_v5_pos.Value, G51_v5_neg.Value, G51_v_low.Value], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value, G51_v3_neg.Value, G51_v3_prb.Value], [1, 1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v3_pos.Value], [0]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([G51_v_low.Value], [1]);
+                G51_Supply = "2.4V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+
+            Command_G51_OFF = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([G51_v3_pos.Value, G51_v3_neg.Value, G51_v5_pos.Value,
+                                            G51_v5_neg.Value, G51_v_low.Value, G51_v3_prb.Value],
+                                           [0, 0, 0, 0, 0, 0]);
+                G51_Supply = "OFF";
+                if(!(obj is bool isLog && !isLog))
+                    SysLog.Add(LogLevel.Warning, $"手動切換電壓(G51):{G51_Supply}");
+            });
+        }
+        #endregion
+        #region G51 Test Sequence
         public void ProcedureTest_G51()
         {
             ProcedureState PState = G51TestState;
@@ -34,21 +108,9 @@ namespace WpfApp_TestVISA
                 return;
             }
             PState.SetStart();
-            ResetSteps();
+            #region G51 Instructions
             Instructions.Clear();
-            NextStep(); //->"等待到位"
-            /*
             string memReady = "G51_Signal_Ready".GetPLCMem();
-            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1"),
-                OnEnd = (Ins) => SysLog.Add(LogLevel.Info, "確認G51工件到位")
-            });//*/
-
-            DispMain?.Invoke(() =>
-            {
-                CurrentProduct = new() { TimeStart = DateTime.Now };
-            });
             string sen_cyUD_DN = "G51_Sensor_CyUD_DN".GetPLCMem();//M4001
             string sen_cyUD_UP = "G51_Sensor_CyUD_UP".GetPLCMem();//M4000
             string cyl_UD_UP = "G51_Cylinder_UD_UP".GetPLCMem();//M3012
@@ -69,13 +131,20 @@ namespace WpfApp_TestVISA
             string cyl_reed = "G51_Cylinder_Reed".GetPLCMem(); //M3014
             string sen_reed = "G51_Sensor_CyReed".GetPLCMem(); //M4002
 
+            string mem_result = "G51_Signal_Result".GetPLCMem();//M4400
+            //*
+            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1"),
+                OnEnd = (Ins) => SysLog.Add(LogLevel.Info, "確認G51工件到位")
+            });//*/
             Instructions.Add(new(1, "斷電確認", Order.Custom)
             {
                 OnStart = (Ins) =>
                 {
                     SysLog.Add(LogLevel.Info, $"電壓初始化...");
                     Global.PLC.WriteRandomData(
-                        [v3_pos, v3_neg, v3_prb, v5_neg, v5_neg, v_low], 
+                        [v3_pos, v3_neg, v3_prb, v5_neg, v5_neg, v_low],
                         [0, 0, 0, 0, 0, 0]);
                     DispMain?.Invoke(() => G51_Supply = "OFF");
                 },
@@ -123,7 +192,7 @@ namespace WpfApp_TestVISA
 
                 }
             });
-            
+
             Instructions.Add(new(12, "切電表至高量程", Order.SendModbus, [(ushort)0x001F, (ushort)2])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至高量程:(0x001F)->2")
@@ -139,7 +208,7 @@ namespace WpfApp_TestVISA
                         SysLog.Add(LogLevel.Error, "電表量程檢查失敗");
                 }
             });
-            
+
             Instructions.Add(new(13, $"測試開關汽缸上升{cyl_switchTest} -> 1", Order.SendPLCSignal, [Global.PLC, cyl_switchTest, (short)1])
             {
                 OnStart = (Ins) => {
@@ -157,7 +226,7 @@ namespace WpfApp_TestVISA
                     DispMain?.Invoke(() => G51_Supply = "3V");
                 },
                 OnEnd = (Ins) => {
-                    Thread.Sleep(100); 
+                    Thread.Sleep(100);
                     Ins.ExcResult = ExcResult.Success;
                     NextStep(); //->"3V導通 LED閃爍檢測"
                 }
@@ -217,11 +286,51 @@ namespace WpfApp_TestVISA
                 },
             });
             AddSigCount(30, photoresistor, 1);
-            Instructions.Add(new(31, $"蓋開升降汽缸上升 {cyl_cover} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)0])
+            Instruction ins_pho_check = new(38, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"蓋開升降汽缸上升 {cyl_cover} -> 0"),
+                OnStart = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
+                    SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1");
+                },
+                OnEnd = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.Success;
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else
+                    {
+                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
+                        Thread.Sleep(300);
+                    }
+                }
+            };
+            Instructions.Add(new(31, $"蓋開汽缸上升 {cyl_cover} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)0])
+            {
+                OnStart = (Ins) => {
+                    Task.Run(() =>  ins_pho_check.Execute());
+                    SysLog.Add(LogLevel.Info, $"蓋開汽缸上升 {cyl_cover} -> 0");
+                },
+                OnEnd = (Ins) =>
+                {
+                    while (ins_pho_check.ExcResult != ExcResult.Success)
+                    {
+                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
+                        {
+                            Ins.ExcResult = ExcResult.Error;
+                            break;
+                        }
+                        Thread.Sleep(200);
+                    }
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "蓋開汽缸光敏檢知異常");
+                    else
+                    {
+                        SysLog.Add(LogLevel.Info, "蓋開汽缸光敏檢知確認");
+                        DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V");
+                    }
+                }
             });
-            AddSigCount(32, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V"));
             Instructions.Add(new(33, "檢查電表為高量程", Order.WaitModbus, [(ushort)0x36, (ushort)1, 5000])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, "檢查電表為高量程:(0x36) == 1"),
@@ -242,7 +351,7 @@ namespace WpfApp_TestVISA
                     DispMain?.Invoke(() => G51_Supply = "5V");
                 },
                 OnEnd = (Ins) => {
-                    Thread.Sleep(100); 
+                    Thread.Sleep(100);
                     Ins.ExcResult = ExcResult.Success;
                     NextStep();
                 }
@@ -280,27 +389,13 @@ namespace WpfApp_TestVISA
                     DispMain?.Invoke(() => G51_Supply = "3V");
                 }
             });
-            Instruction ins_check1 = new(38, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1"),
-                OnEnd = (Ins) =>
-                {
-                    Ins.ExcResult = ExcResult.Success;
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
-                        Thread.Sleep(2000);
-                    }
-                }
-            };
             
+
             Instructions.Add(new(36, $"磁簧感應汽缸下降 {cyl_reed} -> 1", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)1])
             {
                 OnStart = (Ins) => {
                     Task.Run(() => {
-                        ins_check1.Execute();
+                        ins_pho_check.Execute();
                     });
                     NextStep();//->"磁簧汽缸 - LED檢測"
                     SysLog.Add(LogLevel.Info, $"磁簧感應汽缸下降 {cyl_reed} -> 1");
@@ -311,9 +406,9 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸下降 {sen_reed} -> 1"),
                 OnEnd = (Ins) =>
                 {
-                    while (ins_check1.ExcResult != ExcResult.Success)
+                    while (ins_pho_check.ExcResult != ExcResult.Success)
                     {
-                        if (ins_check1.ExcResult == ExcResult.TimeOut)
+                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
                         {
                             Ins.ExcResult = ExcResult.Error;
                             break;
@@ -321,32 +416,17 @@ namespace WpfApp_TestVISA
                         Thread.Sleep(200);
                     }
                     if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "磁簧感應汽缸下降異常");
+                        SysLog.Add(LogLevel.Error, "磁簧感應光敏檢知異常");
                     else
-                        SysLog.Add(LogLevel.Info, "確認磁簧感應汽缸下降");
+                        SysLog.Add(LogLevel.Info, "磁簧感應光敏檢知確認");
                 }
             });
-            Instruction ins_check2 = new(41, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1"),
-                OnEnd = (Ins) =>
-                {
-                    Ins.ExcResult = ExcResult.Success;
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
-                        Thread.Sleep(2000);
-                    }
-                }
-            };
 
             Instructions.Add(new(39, $"磁簧感應汽缸上升 {cyl_reed} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)0])
             {
                 OnStart = (Ins) => {
                     Task.Run(() => {
-                        ins_check2.Execute();
+                        ins_pho_check.Execute();
                     });
                     SysLog.Add(LogLevel.Info, $"磁簧感應汽缸上升 {cyl_reed} -> 0");
                 },
@@ -357,10 +437,10 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸上升 {sen_reed} -> 0"),
                 OnEnd = (Ins) =>
                 {
-                    
-                    while (ins_check2.ExcResult != ExcResult.Success)
+
+                    while (ins_pho_check.ExcResult != ExcResult.Success)
                     {
-                        if (ins_check2.ExcResult == ExcResult.TimeOut)
+                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
                         {
                             Ins.ExcResult = ExcResult.Error;
                             break;
@@ -368,15 +448,30 @@ namespace WpfApp_TestVISA
                         Thread.Sleep(200);
                     }
                     if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "磁簧感應汽缸上升異常");
+                        SysLog.Add(LogLevel.Error, "磁簧上升光敏檢知異常");
                     else
-                        SysLog.Add(LogLevel.Info, "確認磁簧感應汽缸上升");
+                    {
+                        SysLog.Add(LogLevel.Info, "磁簧上升光敏檢知確認");
+                        DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V");
+                    }
                 }
             });
-           
+
+            Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
+            {
+                OnStart = async (Ins) => {
+                    bool isP = await PrepareRF();
+                    Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
+                },
+            };
             Instructions.Add(new(42, $"3V+導通(探針) {v3_prb}-> 1", Order.SendPLCSignal, [Global.PLC, v3_prb, (short)1])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"3V+導通(探針) {v3_prb}-> 1"),
+                OnStart = (Ins) => {
+                    Task.Run(() => {
+                        ins_initRF.Execute();
+                    });
+                    SysLog.Add(LogLevel.Info, $"3V+導通(探針) {v3_prb}-> 1");
+                },
                 OnEnd = (Ins) => Thread.Sleep(200)
             });
 
@@ -389,20 +484,10 @@ namespace WpfApp_TestVISA
                     DispMain?.Invoke(() => G51_Supply = "探針");
                 }
             });
-            Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
-            {
-                OnStart = async (Ins) => {
-                    bool isP = await PrepareRF();
-                    Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
-                },
-            };
             Instructions.Add(new(44, $"2.4V導通 {v_low} -> 1", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
             {
                 OnStart = (Ins) =>
                 {
-                    Task.Run(() => {
-                        ins_initRF.Execute();
-                    });
                     Thread.Sleep(300);
                     NextStep(); //->"2.4V LED閃爍檢測"
                     SysLog.Add(LogLevel.Info, $"2.4V導通 {v_low} -> 1");
@@ -439,7 +524,7 @@ namespace WpfApp_TestVISA
             Instructions.Add(new(46, $"2.4V斷開 {v_low} -> 0", Order.SendPLCSignal, [Global.PLC, v_low, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"2.4V斷開 {v_low} -> 0"),
-                OnEnd = (Ins)=> DispMain?.Invoke(() => G51_Supply = "探針")
+                OnEnd = (Ins) => DispMain?.Invoke(() => G51_Supply = "探針")
             });
 
             ///NOTED 頻譜儀檢查
@@ -450,7 +535,7 @@ namespace WpfApp_TestVISA
                     NextStep(); //->"測試開關 - LED檢測"
                     SysLog.Add(LogLevel.Info, $"測試開關汽缸上升 {cyl_switchTest} -> 1");
                 },
-                OnEnd =(Ins) => Thread.Sleep(100)
+                OnEnd = (Ins) => Thread.Sleep(200)
             });
 
             Instructions.Add(new(48, "等待亮燈", Order.WaitPLCSiganl, [Global.PLC, photoresistor, (short)1, 2000])
@@ -459,22 +544,24 @@ namespace WpfApp_TestVISA
                 OnEnd = (Ins) => {
                     SysLog.Add(LogLevel.Info, "確認光敏檢知");
                     Ins.ExcResult = ExcResult.Success;
-                    Thread.Sleep(500);
-                    },
+                },
             });
 
             Instructions.Add(new(49, "測試開關汽缸下降", Order.SendPLCSignal, [Global.PLC, cyl_switchTest, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"測試開關汽缸下降 {cyl_switchTest}-> 0"),
             });
-            AddSigCount(48, photoresistor, 1);
+            AddSigCount(48, photoresistor, 1, 
+                ()=> DispMain?.Invoke(() => CurrentProduct!.OnOffCheck = "V"));
+
             Instructions.Add(new(50, "頻譜儀天線強度測試", Order.Custom)
             {
                 OnStart = async (Ins) =>
                 {
                     NextStep();  //"頻譜儀天線強度測試"
-                    double value = await ReadRFValue();
-                    Ins.ExcResult = double.IsNaN(value) ? ExcResult.Error : ExcResult.Success;
+                    double rf_value = await ReadRFValue();
+                    DispMain?.Invoke(() => CurrentProduct!.TestAntenna = rf_value);
+                    Ins.ExcResult = double.IsNaN(rf_value) ? ExcResult.Error : ExcResult.Success;
                 },
             });
 
@@ -484,7 +571,7 @@ namespace WpfApp_TestVISA
                 {
                     SysLog.Add(LogLevel.Info, $"斷開3V {v3_prb}->0 {v3_neg}->0");
                     Global.PLC.WriteRandomData([v3_prb, v3_neg], [0, 0]);
-                    Thread.Sleep(300); 
+                    Thread.Sleep(300);
                     Ins.ExcResult = ExcResult.Success;
                     DispMain?.Invoke(() => G51_Supply = "OFF");
                 }
@@ -521,7 +608,7 @@ namespace WpfApp_TestVISA
                 }
             });
 
-            Instructions.Add(new(10, "讀電表值(低量程)", Order.WaitModbusFloat, [(ushort)0x0032, (float) 1.0f, (float) 8.0f, 8000])
+            Instructions.Add(new(10, "讀電表值(低量程)", Order.WaitModbusFloat, [(ushort)0x0032, (float)1.0f, (float)8.0f, 8000])
             {
                 OnStart = (Ins) => {
                     SysLog.Add(LogLevel.Info, "等待低量程電表(0x0032)數值(1uA~8uA)");
@@ -555,14 +642,13 @@ namespace WpfApp_TestVISA
                 }
             });
 
-            string mem_result = "G51_Signal_Result".GetPLCMem();//M4400
             Instructions.Add(new(52, "測試完畢", Order.SendPLCSignal, [Global.PLC, mem_result, (short)1])
             {
                 OnEnd = (Ins) =>
                 {
                     NextStep();
                     SysLog.Add(LogLevel.Success, $"產品作業完成 {mem_result} -> 1");
-                    Thread.Sleep(2000);
+                    //Thread.Sleep(2000);
                 },
             });
             //M3013 -> 1 升降汽缸下降
@@ -611,8 +697,18 @@ namespace WpfApp_TestVISA
                     NextStep();
                 }
             });
+            #endregion
             Task.Run(() =>
             {
+                if(CurrentStepID != 4)
+                {
+                    if (CurrentProduct == null)
+                        DispMain?.Invoke(() => {
+                            CurrentProduct = new() { TimeStart = DateTime.Now };
+                            ProductRecords.Add(CurrentProduct);
+                        });
+                    ResetSteps(4, setStart: true);
+                }
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
@@ -621,8 +717,8 @@ namespace WpfApp_TestVISA
                 {
                     if (PState.IsCompleted) //錯誤發生提前結束
                         return;
-                     
-                    bool ex = "流程".TryCatch(() =>
+
+                    bool ex = "測試流程".TryCatch(() =>
                     {
                         if (PState.IsModeStep)
                         {
@@ -640,21 +736,142 @@ namespace WpfApp_TestVISA
                         string title = ins.Title;
                         ins?.Execute();
                         PState.SignalNext = false;
-                        if (ins != null && ins.ExcResult != ExcResult.Success)
+                        if (!PState.IsBypassErr && ins != null &&
+                            ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            G51TestNGRelease();
                             return;
                         }
                     });
                     if (!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        G51TestNGRelease();
                         return;
                     }
                 }
+                if (CurrentProduct != null)
+                    DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
                 //Normal
                 PState.SetEnd(ExcResult.Success);
+                CurrentProduct = null;
             });
+        }
+        public void ProcedureG51ResetTest()
+        {
+            ProcedureState PState = G51TestState;
+            if (PState.IsReseting)
+            {
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
+                return;
+            }
+            PState.IsReseting = true;
+            string sen_cyUD_DN = "G51_Sensor_CyUD_DN".GetPLCMem();//M4001
+            string sen_cyUD_UP = "G51_Sensor_CyUD_UP".GetPLCMem();//M4000
+            string cyl_UD_UP = "G51_Cylinder_UD_UP".GetPLCMem();//M3012
+            string cyl_UD_DN = "G51_Cylinder_UD_DN".GetPLCMem();//M3013
+            string cyl_switchTest = "G51_Cylinder_SwitchTest".GetPLCMem();//M3006
+            string pin_DIO = "G51_Pin_DIO".GetPLCMem();//M3000
+            string pin_switch1 = "G51_Pin_Switch1".GetPLCMem();//M3001
+            string pin_switch2 = "G51_Pin_Switch2".GetPLCMem();//M3002
+            string cyl_cover = "G51_Cylinder_Cover".GetPLCMem(); //M3005
+            string cyl_reed = "G51_Cylinder_Reed".GetPLCMem(); //M3014
+
+            "終止復歸".TryCatch(() =>
+            {
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
+                while (PState.IsBusy)
+                    Thread.Sleep(1000);
+                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸...");
+                //電路
+                bool isLog = false;
+                Command_G51_OFF!.Execute(isLog);
+                Thread.Sleep(500);
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸完成");
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸...");
+                //汽缸
+                Global.PLC.WriteOneData(cyl_reed, 0);
+                Global.PLC.WriteOneData(cyl_switchTest, 0);
+                Global.PLC.WriteOneData(cyl_cover, 0);
+                Thread.Sleep(500);
+                //開關
+                Global.PLC.WriteRandomData([pin_DIO, pin_switch1, pin_switch2], [0, 0, 0]);
+                Thread.Sleep(200);
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸完成");
+
+                if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
+                {
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認汽缸在上定位");
+                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
+                    Thread.Sleep(500);
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
+                    Global.PLC.WriteOneData(cyl_UD_DN, 1);
+                    Thread.Sleep(500);
+                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
+                        Thread.Sleep(500);
+                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
+                }
+                DispMain?.Invoke(() =>
+                {
+                    PState.BrushState = Brushes.Transparent;
+                });
+            }, () => PState.IsReseting = false);
+            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
+            SysLog.Add(LogLevel.Info, $"{PState.Title}:復歸完成");
+        }
+        private void G51TestNGRelease()
+        {
+            const short ng_value = 2;
+            string mem_result = "G51_Signal_Result".GetPLCMem();//M4400
+            SysLog.Add(LogLevel.Warning, $"{G51TestState.Title}:設定NG復歸...");
+            Global.PLC.WriteOneData(mem_result, ng_value);
+            ProcedureG51ResetTest(); 
+            if (CurrentProduct != null)
+                DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
+            CurrentProduct = null;
+        }
+        #endregion
+        #region G51 Burn Sequence
+        public void ProcedureG51ResetBurn()
+        {
+            string sen_cyUD_DN = "G51_Sensor_CyBUD_DN".GetPLCMem();//M4011
+            string sen_cyUD_UP = "G51_Sensor_CyBUD_UP".GetPLCMem();//M4010
+            string cyl_UD_UP = "G51_Cylinder_BUD_UP".GetPLCMem();//M3020
+            string cyl_UD_DN = "G51_Cylinder_BUD_DN".GetPLCMem();//M3021
+
+            ProcedureState PState = G51BurnState;
+            if (PState.IsReseting)
+            {
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
+                return;
+            }
+            PState.IsReseting = true;
+
+            "終止復歸".TryCatch(() =>
+            {
+                if (PState.IsBusy && Global.ProcessBurn != null)
+                    Global.ProcessBurn.Kill();
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
+                while (PState.IsBusy)
+                    Thread.Sleep(1000);
+                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
+                if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
+                {
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在上定位");
+                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
+                    Thread.Sleep(500);
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
+                    Global.PLC.WriteOneData(cyl_UD_DN, 1);
+                    Thread.Sleep(500);
+                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
+                        Thread.Sleep(500);
+                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
+                }
+            }, () => PState.IsReseting = false);
+            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
+            SysLog.Add(LogLevel.Info, $"{PState.Title}:復歸完成");
         }
         public void ProcedureBurn_G51()
         {
@@ -669,15 +886,14 @@ namespace WpfApp_TestVISA
             string sen_cyUD_UP = "G51_Sensor_CyBUD_UP".GetPLCMem();//M4010
             string cyl_UD_UP = "G51_Cylinder_BUD_UP".GetPLCMem();//M3020
             string cyl_UD_DN = "G51_Cylinder_BUD_DN".GetPLCMem();//M3021
-            InstructionsBurn.Clear();
-            /*
             string memReady = "G51_Burn_Ready".GetPLCMem();
+            string mem_burn_result = "G51_Burn_Result".GetPLCMem();//D3020
+            #region G51 Burn Instructions
+            InstructionsBurn.Clear();
+            //*
             InstructionsBurn.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待燒錄工件放置完畢 {memReady} == 1"),
-                OnEnd = (Ins) =>
-                {
-                }
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待燒錄工件放置完畢 {memReady} == 1")
             });//*/
             InstructionsBurn.Add(new(1, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_DN, (short)1, 2000])
             {
@@ -722,23 +938,19 @@ namespace WpfApp_TestVISA
 
                 }
             });
-            string mem_burn_result = "G51_Burn_Result".GetPLCMem();//D3020
             InstructionsBurn.Add(new(2, "燒錄", Order.Burn, "PathBAT_G51")
             {
-                OnStart = (Ins) =>
+                OnStart= (Ins)=> DispMain?.Invoke(() => NextStep()),
+                OnEnd = (Ins) =>
                 {
-                    Thread.Sleep(1000);
-                },
-                OnEnd = (Ins) => DispMain?.Invoke(() =>
-                {
-                    //CurrentProduct!.BurnCheck = (Ins.ExcResult == ExcResult.Success) ? "V" : "X";
+                    DispMain?.Invoke(() => CurrentProduct!.BurnCheck = (Ins.ExcResult == ExcResult.Success) ? "V" : "X");
                     if (Ins.ExcResult != ExcResult.Success)
                     {
                         int reT = BurnRetryT;
                         Instruction insBurnRe = new(101, "燒錄", Order.Burn, "PathBAT_G51");
                         for (int i = 0; i < reT; i++)
                         {
-                            SysLog.Add(LogLevel.Warning, "燒錄重試開始...");
+                            SysLog.Add(LogLevel.Warning, $"{PState.Title}:燒錄重試開始...");
                             Thread.Sleep(500);
                             insBurnRe.Execute();
                             Ins.ExcResult = insBurnRe.ExcResult;
@@ -746,7 +958,7 @@ namespace WpfApp_TestVISA
                                 break;
                         }
                     }
-                    if(Ins.ExcResult == ExcResult.Success)
+                    if (Ins.ExcResult == ExcResult.Success)
                     {
                         Global.PLC.WriteOneData(mem_burn_result, 1);
                         SysLog.Add(LogLevel.Info, $"PLC確認燒錄OK {mem_burn_result} -> 1");
@@ -756,8 +968,8 @@ namespace WpfApp_TestVISA
                         Global.PLC.WriteOneData(mem_burn_result, 2);
                         SysLog.Add(LogLevel.Warning, $"PLC確認燒錄NG {mem_burn_result} -> 2");
                     }
-                    Ins.ExcResult = ExcResult.Success;
-                })
+                    NextStep();
+                }
             });
             InstructionsBurn.Add(new(3, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
             {
@@ -781,7 +993,7 @@ namespace WpfApp_TestVISA
                     DateTime stT = DateTime.Now; bool err = false;
                     while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
                     {
-                        if ((DateTime.Now - stT).TotalSeconds > 10)
+                        if ((DateTime.Now - stT).TotalSeconds > 5.0)
                         {
                             err = true;
                             break;
@@ -798,15 +1010,23 @@ namespace WpfApp_TestVISA
                         SysLog.Add(LogLevel.Info, $"確認燒錄升降已在下定位 {sen_cyUD_DN} == 1");
                         Global.PLC.WriteOneData(cyl_UD_DN, 0);
                         SysLog.Add(LogLevel.Info, $"燒錄升降下降復歸 {cyl_UD_DN} -> 0");
+                        NextStep();
                     }
 
                 }
             });
+            #endregion
             Task.Run(() =>
             {
+                ResetSteps(1, setStart: true);
+                DispMain?.Invoke(() =>
+                {
+                    CurrentProduct = new() { TimeStart = DateTime.Now };
+                    ProductRecords.Add(CurrentProduct);
+                });
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
-                    SysLog.Add(LogLevel.Warning, "步進模式");
+                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:啟用步進模式");
 
                 foreach (Instruction ins in InstructionsBurn)
                 {
@@ -824,21 +1044,25 @@ namespace WpfApp_TestVISA
                         if (PState.IsReseting || PState.IsStop)
                         {
                             PState.SetEnd(ExcResult.Abort);
+                            SysLog.Add(LogLevel.Warning, $"{PState.Title}:已終止，請指定復歸方式後排出");
                             return;
                         }
                         int id = ins.ID ?? -1;
                         string title = ins.Title;
                         ins?.Execute();
                         PState.SignalNext = false;
-                        if (ins != null && ins.ExcResult != ExcResult.Success)
+                        if (!PState.IsBypassErr && ins != null &&
+                            ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            G51BurnNGRelease();
                             return;
                         }
                     });
                     if(!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        G51BurnNGRelease();
                         return;
                     }
                 }
@@ -846,116 +1070,17 @@ namespace WpfApp_TestVISA
                 PState.SetEnd(ExcResult.Success);
             });
         }
-        public void ProcedureG51ResetTest()
+        private void G51BurnNGRelease()
         {
-            ProcedureState PState = G51TestState;
-            if (PState.IsReseting)
-            {
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
-                return;
-            }
-            PState.IsReseting = true;
-            string sen_cyUD_DN = "G51_Sensor_CyUD_DN".GetPLCMem();//M4001
-            string sen_cyUD_UP = "G51_Sensor_CyUD_UP".GetPLCMem();//M4000
-            string cyl_UD_UP = "G51_Cylinder_UD_UP".GetPLCMem();//M3012
-            string cyl_UD_DN = "G51_Cylinder_UD_DN".GetPLCMem();//M3013
-
-            string v3_pos = "G51_Supply_3V+".GetPLCMem(); //M3008
-            string v3_neg = "G51_Supply_3V-".GetPLCMem(); //M3009
-            string v5_pos = "G51_Supply_5V+".GetPLCMem(); //M3003
-            string v5_neg = "G51_Supply_5V-".GetPLCMem(); //M3004
-            string v_low = "G51_Supply_2.4V".GetPLCMem(); //M3011
-            string v3_prb = "G51_Supply_3V+Probe".GetPLCMem(); //M3010
-
-            string cyl_switchTest = "G51_Cylinder_SwitchTest".GetPLCMem();//M3006
-            string pin_DIO = "G51_Pin_DIO".GetPLCMem();//M3000
-            string pin_switch1 = "G51_Pin_Switch1".GetPLCMem();//M3001
-            string pin_switch2 = "G51_Pin_Switch2".GetPLCMem();//M3002
-            string cyl_cover = "G51_Cylinder_Cover".GetPLCMem(); //M3005
-            string cyl_reed = "G51_Cylinder_Reed".GetPLCMem(); //M3014
-
-            "終止復歸".TryCatch(() =>
-            {
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
-                while (PState.IsBusy)
-                    Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸...");
-                //電路
-                Global.PLC.WriteRandomData([v_low ,v5_pos, v5_neg], [0, 0, 0]);
-                Global.PLC.WriteRandomData([v3_pos, v3_neg, v3_prb], [0, 0, 0]);
-                DispMain?.Invoke(() => G51_Supply = "OFF");
-                Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:電壓源復歸完成");
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸...");
-                //汽缸
-                Global.PLC.WriteOneData(cyl_reed, 0);
-                Global.PLC.WriteOneData(cyl_switchTest, 0);
-                Global.PLC.WriteOneData(cyl_cover, 0);
-                Thread.Sleep(500);
-                //開關
-                Global.PLC.WriteRandomData([pin_DIO, pin_switch1, pin_switch2], [0, 0, 0]);
-                Thread.Sleep(500);
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:IO復歸完成");
-
-                if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
-                {
-                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認汽缸在上定位");
-                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0 ,0]);
-                    Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
-                    Global.PLC.WriteOneData(cyl_UD_DN, 1);
-                    Thread.Sleep(500);
-                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
-                        Thread.Sleep(500);
-                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
-                }
-                DispMain?.Invoke(() =>
-                {
-                    PState.BrushState = Brushes.Transparent;
-                });
-            }, () => PState.IsReseting = false);
-            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
-            SysLog.Add(LogLevel.Info, $"{PState.Title}:復歸完成");
+            const short ng_value = 2;
+            string mem_burn_result = "G51_Burn_Result".GetPLCMem();//D3020
+            SysLog.Add(LogLevel.Warning, $"{G51BurnState.Title}:設定NG復歸...");
+            Global.PLC.WriteOneData(mem_burn_result, ng_value);
+            if(CurrentProduct != null)
+                DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
+            ProcedureG51ResetBurn();
+            CurrentProduct = null;
         }
-        public void ProcedureG51ResetBurn()
-        {
-            string sen_cyUD_DN = "G51_Sensor_CyBUD_DN".GetPLCMem();//M4011
-            string sen_cyUD_UP = "G51_Sensor_CyBUD_UP".GetPLCMem();//M4010
-            string cyl_UD_UP = "G51_Cylinder_BUD_UP".GetPLCMem();//M3020
-            string cyl_UD_DN = "G51_Cylinder_BUD_DN".GetPLCMem();//M3021
-
-            ProcedureState PState = G51BurnState;
-            if (PState.IsReseting)
-            {
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在復歸");
-                return;
-            }
-            PState.IsReseting = true;
-
-            "終止復歸".TryCatch(() =>
-            {
-                if (PState.IsBusy && Global.ProcessBurn != null)
-                    Global.ProcessBurn.Kill();
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}:等待結束...");
-                while (PState.IsBusy)
-                    Thread.Sleep(1000);
-                SysLog.Add(LogLevel.Info, $"{PState.Title}:確認終止，復歸中...");
-                if (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue != 0)
-                {
-                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在上定位");
-                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
-                    Thread.Sleep(500);
-                    SysLog.Add(LogLevel.Warning, $"{PState.Title}:升降汽缸下降復歸...");
-                    Global.PLC.WriteOneData(cyl_UD_DN, 1);
-                    Thread.Sleep(500);
-                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
-                        Thread.Sleep(500);
-                    Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
-                }
-            }, () => PState.IsReseting = false);
-            SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
-            SysLog.Add(LogLevel.Warning, $"{PState.Title}:復歸完成");
-        }
+        #endregion
     }
 }

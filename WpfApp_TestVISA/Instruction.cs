@@ -284,9 +284,11 @@ namespace WpfApp_TestVISA
             port.ReadTimeout = 1000;
             DateTime t_start = DateTime.Now;
 
+            int validCount = 0; 
+
             while((DateTime.Now - t_start).TotalMilliseconds < timeOut)
             {
-                Thread.Sleep(500);
+                Thread.Sleep(300);
                 byte slaveId = 1;
                 regs = master.ReadHoldingRegisters(slaveId, regAddr, 2);
                 if (regs.Length == 2)
@@ -296,9 +298,14 @@ namespace WpfApp_TestVISA
                     Result = volt;
                     if (volt < maxV && volt > minV)
                     {
-                        port.Close();
-                        return ExcResult.Success;
+                        validCount++;
+                        if (validCount > 3)
+                        {
+                            port.Close();
+                            return ExcResult.Success;
+                        }
                     }
+                    else validCount = 0;
                 }
                 else
                 {
@@ -412,7 +419,7 @@ namespace WpfApp_TestVISA
                 isModeStep = value;
             } 
         }
-        public bool IsEnAutoNG { get; set; } = true;
+        public bool IsBypassErr { get; set; } = false;
         public bool IsBusy { get; set; } = false;
         public bool SignalNext { get;set; } = false;
         public bool IsStop { get; set; } = false;
@@ -438,6 +445,7 @@ namespace WpfApp_TestVISA
         }
         public void SetEnd(ExcResult excR)
         {
+            ExcResult = excR;
             double t = (DateTime.Now - TStart)?.TotalSeconds ?? double.NaN;
             Model_Main.DispMain?.Invoke(() =>
             {

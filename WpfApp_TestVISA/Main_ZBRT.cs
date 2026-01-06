@@ -2,23 +2,82 @@
 using Support;
 using Support.Data;
 using Support.Logger;
+using Support.Wpf.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace WpfApp_TestVISA
 {
     public partial class Model_Main
     {
+        static Lazy<string> ZBRT_v5_pos = new(()=> "ZBRT_Supply_5V+".GetPLCMem());//M3051
+        static Lazy<string> ZBRT_v5_neg = new(()=> "ZBRT_Supply_5V-".GetPLCMem());//M3052
+        static Lazy<string> ZBRT_v3_pos = new(()=> "ZBRT_Supply_3V+".GetPLCMem());//M3055
+        static Lazy<string> ZBRT_v3_neg = new(()=> "ZBRT_Supply_3V-".GetPLCMem());//M3056
+        static Lazy<string> ZBRT_v_low = new (()=>"ZBRT_Supply_2.4V".GetPLCMem());//M3058
+        public ProcedureState ZBRTBurnState { get; set; } = new("ZBRT燒錄程序");
+        public ProcedureState ZBRTTestState { get; set; } = new("ZBRT測試程序");
+
         internal static readonly string[] StrSteps_ZBRT = [
-            "等待產品到位","3V導通LED檢測", "蓋開LED檢測", "5V導通LED檢測",
+            "等待燒錄到位" ,"燒錄中", "燒錄完成復歸",
+            "等待測試到位","3V導通LED檢測", "蓋開LED檢測", "5V導通LED檢測",
             "低電壓LED檢測", "測試開關 - LED檢測", "頻譜儀天線強度測試", 
             "完成並記錄資訊"
         ];
+        #region ZBRT Related Commands
+        public ICommand Command_ZBRT_3VON { get; set; }
+        public ICommand Command_ZBRT_5VON { get; set; }
+        public ICommand Command_ZBRT_LowV { get; set; }
+        public ICommand Command_ZBRT_OFF { get; set; }
+        private void InitializeCommands_ZBRT()
+        {
+            Command_ZBRT_3VON = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([ZBRT_v5_pos.Value, ZBRT_v5_pos.Value, ZBRT_v_low.Value], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v3_pos.Value, ZBRT_v3_neg.Value], [1, 1]);
+                ZBRT_Supply = "3V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+            Command_ZBRT_5VON = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([ZBRT_v_low.Value, ZBRT_v3_pos.Value, ZBRT_v3_neg.Value], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v5_pos.Value, ZBRT_v5_neg.Value], [1, 1]);
+                ZBRT_Supply = "5V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+            Command_ZBRT_LowV = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([ZBRT_v5_pos.Value, ZBRT_v5_neg.Value, ZBRT_v_low.Value], [0, 0, 0]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v3_pos.Value, ZBRT_v3_neg.Value], [1, 1]);
+                Thread.Sleep(100);
+                Global.PLC.WriteRandomData([ZBRT_v_low.Value], [1]);
+                ZBRT_Supply = "2.4V";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+
+            Command_ZBRT_OFF = new RelayCommand<object>((obj) =>
+            {
+                if (!Global.IsInitialized) return;
+                Global.PLC.WriteRandomData([ZBRT_v3_pos.Value, ZBRT_v3_neg.Value, ZBRT_v5_pos.Value, ZBRT_v5_neg.Value, ZBRT_v_low.Value],
+                                           [0, 0, 0, 0, 0]);
+                ZBRT_Supply = "OFF";
+                SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
+            });
+        }
+        #endregion
+        #region ZBRT Test Sequence
         public void ProcedureTest_ZBRT()
         {
             ProcedureState PState = ZBRTTestState;
@@ -28,23 +87,9 @@ namespace WpfApp_TestVISA
                 return;
             }
             PState.SetStart();
-            ResetSteps();
+            #region ZBRT Test Instructions
             Instructions.Clear();
-            NextStep(); //->"等待探針到位"
-
-            DispMain?.Invoke(() =>
-            {
-                CurrentProduct = new() { TimeStart = DateTime.Now };
-            });
-
             string memReady = "ZBRT_Signal_Ready".GetPLCMem();
-            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1"),
-                OnEnd = (Ins) =>
-                {
-                }
-            });
             string sen_cyUD_UP = "ZBRT_Sensor_CyUD_UP".GetPLCMem();//M4050
             string sen_cyUD_DN = "ZBRT_Sensor_CyUD_DN".GetPLCMem();//M4051
             string cyl_UD_UP = "ZBRT_Cylinder_UD_UP".GetPLCMem();//M3059
@@ -57,6 +102,12 @@ namespace WpfApp_TestVISA
             string v_low = "ZBRT_Supply_2.4V".GetPLCMem();//M3058
             string photoresistor = "ZBRT_Sensor_Photoresistor".GetPLCMem();//M4052
             string cyl_cover = "ZBRT_Cylinder_Cover".GetPLCMem();//M3053
+
+            Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1")
+            });
+            
             Instructions.Add(new(1, "斷電確認", Order.Custom)
             {
                 OnStart = (Ins) =>
@@ -191,17 +242,6 @@ namespace WpfApp_TestVISA
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"蓋開升降汽缸上升 {cyl_cover} -> 0"),
             });
             AddSigCount(32, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V"));
-
-            Instructions.Add(new(33, "斷開5V", Order.Custom)
-            {
-                OnStart = (Ins) =>
-                {
-                    SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
-                    Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
-                    Ins.ExcResult = ExcResult.Success;
-                }
-            });
-            AddSigCount(34, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V"));
             Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
             {
                 OnStart = async (Ins) => {
@@ -209,14 +249,25 @@ namespace WpfApp_TestVISA
                     Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
                 },
             };
-
-            Instructions.Add(new(44, "2.4V導通", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
+            Instructions.Add(new(33, "斷開5V", Order.Custom)
             {
                 OnStart = (Ins) =>
                 {
                     Task.Run(() => {
                         ins_initRF.Execute();
                     });
+                    SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
+                    Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
+                    Ins.ExcResult = ExcResult.Success;
+                }
+            });
+            AddSigCount(34, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V"));
+           
+
+            Instructions.Add(new(44, "2.4V導通", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
+            {
+                OnStart = (Ins) =>
+                {
                     NextStep(); //->"2.4V LED閃爍檢測"
                     SysLog.Add(LogLevel.Info, $"2.4V導通 {v_low} -> 1");
                 }
@@ -349,8 +400,18 @@ namespace WpfApp_TestVISA
                     }
                 }
             });
+            #endregion
             Task.Run(() =>
             {
+                if (CurrentStepID != 4)
+                {
+                    if (CurrentProduct == null)
+                        DispMain?.Invoke(() => {
+                            CurrentProduct = new() { TimeStart = DateTime.Now };
+                            ProductRecords.Add(CurrentProduct);
+                        });
+                    ResetSteps(4, setStart: true);
+                }
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
@@ -377,214 +438,28 @@ namespace WpfApp_TestVISA
                         string title = ins.Title;
                         ins?.Execute();
                         PState.SignalNext = false;
-                        if (ins != null && ins.ExcResult != ExcResult.Success)
+                        if (!PState.IsBypassErr && ins != null &&
+                            ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            ZBRTTestNGRelease();
                             return;
                         }
                     });
                     if (!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        ZBRTTestNGRelease();
                         return;
                     }
                 }
+                if (CurrentProduct != null)
+                    DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
                 //Normal
                 PState.SetEnd(ExcResult.Success);
+                CurrentProduct = null;
             });
         }
-        public void ProcedureBurn_ZBRT()
-        {
-            ProcedureState PState = ZBRTBurnState;
-            if (PState.IsBusy)
-            {
-                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在執行，先終止後重啟");
-                return;
-            }
-            PState.SetStart();
-            string sen_cyUD_UP = "ZBRT_Sensor_CyBUD_UP".GetPLCMem();//M4050
-            string sen_cyUD_DN = "ZBRT_Sensor_CyBUD_DN".GetPLCMem();//M4051
-            string cyl_UD_UP = "ZBRT_Cylinder_BUD_UP".GetPLCMem();//M3059
-            string cyl_UD_DN = "ZBRT_Cylinder_BUD_DN".GetPLCMem();//M3060
-            InstructionsBurn.Clear();
-            string memReady = "ZBRT_Burn_Ready".GetPLCMem();
-            InstructionsBurn.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待燒錄工件放置完畢 {memReady} == 1"),
-                OnEnd = (Ins) =>
-                {
-                }
-            });
-
-            InstructionsBurn.Add(new(1, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_DN, (short)1, 2000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:下定位{sen_cyUD_DN} == 1"),
-                OnEnd = (Ins) => {
-                    if (Ins.ExcResult == ExcResult.Success)
-                    {
-                        SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸在下定位");
-                        Thread.Sleep(500);
-                        SysLog.Add(LogLevel.Info, $"燒錄升降汽缸上升 {cyl_UD_UP} -> 1");
-                        Global.PLC.WriteOneData(cyl_UD_UP, 1);
-                        Thread.Sleep(1000);
-                    }
-                    else
-                    {
-                        SysLog.Add(LogLevel.Error, $"升降汽缸不在下定位 {sen_cyUD_DN} == 0");
-                        Ins.ExcResult = ExcResult.Error;
-                        return;
-                    }
-                    SysLog.Add(LogLevel.Info, $"等待升降汽缸上檢知 {sen_cyUD_UP} == 1");
-                    DateTime stT = DateTime.Now; bool err = false;
-                    while (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue == 0)
-                    {
-                        if ((DateTime.Now - stT).TotalSeconds > 10)
-                        {
-                            err = true;
-                            break;
-                        }
-                        Thread.Sleep(500);
-                    }
-                    if (err)
-                    {
-                        SysLog.Add(LogLevel.Error, "升降汽缸作動異常，上定位到位確認超時");
-                        Ins.ExcResult = ExcResult.Error;
-                    }
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認汽缸已在上定位 {sen_cyUD_UP} == 1");
-                        Global.PLC.WriteOneData(cyl_UD_UP, 0);
-                        SysLog.Add(LogLevel.Info, $"升降汽缸上升復歸 {cyl_UD_UP} -> 0");
-                    }
-
-                }
-            });
-            string mem_burn_result = "ZBRT_Burn_Result".GetPLCMem();//D3021
-            InstructionsBurn.Add(new(2, "燒錄", Order.Burn, "PathBAT_ZBRT")
-            {
-                OnStart = (Ins) =>
-                {
-                    Thread.Sleep(1000);
-                },
-                OnEnd = (Ins) => DispMain?.Invoke(() =>
-                {
-                    //CurrentProduct!.BurnCheck = (Ins.ExcResult == ExcResult.Success) ? "V" : "X";
-                    if (Ins.ExcResult != ExcResult.Success)
-                    {
-                        int reT = BurnRetryT;
-                        Instruction insBurnRe = new(101, "燒錄", Order.Burn, "PathBAT_ZBRT");
-                        for (int i = 0; i < reT; i++)
-                        {
-                            SysLog.Add(LogLevel.Warning, "燒錄重試開始...");
-                            Thread.Sleep(500);
-                            insBurnRe.Execute();
-                            Ins.ExcResult = insBurnRe.ExcResult;
-                            if (Ins.ExcResult == ExcResult.Success)
-                                break;
-                        }
-                    }
-                    if (Ins.ExcResult == ExcResult.Success)
-                    {
-                        Global.PLC.WriteOneData(mem_burn_result, 1);
-                        SysLog.Add(LogLevel.Info, $"PLC確認燒錄OK {mem_burn_result} -> 1");
-                    }
-                    else
-                    {
-                        Global.PLC.WriteOneData(mem_burn_result, 2);
-                        SysLog.Add(LogLevel.Warning, $"PLC確認燒錄NG {mem_burn_result} -> 2");
-                    }
-                    Ins.ExcResult = ExcResult.Success;
-                })
-            });
-            InstructionsBurn.Add(new(3, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:上定位 {sen_cyUD_UP} == 1"),
-                OnEnd = (Ins) => {
-                    if (Ins.ExcResult == ExcResult.Success)
-                    {
-                        SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸在上定位");
-                        Thread.Sleep(500);
-                        SysLog.Add(LogLevel.Info, $"燒錄升降汽缸下降 {cyl_UD_DN} -> 1");
-                        Global.PLC.WriteOneData(cyl_UD_DN, 1);
-                        Thread.Sleep(1000);
-                    }
-                    else
-                    {
-                        SysLog.Add(LogLevel.Error, $"燒錄升降汽缸不在上定位 {sen_cyUD_UP} == 0");
-                        Ins.ExcResult = ExcResult.Error;
-                        return;
-                    }
-                    SysLog.Add(LogLevel.Info, $"等待燒錄升降汽缸下檢知 {sen_cyUD_DN} == 1");
-                    DateTime stT = DateTime.Now; bool err = false;
-                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
-                    {
-                        if ((DateTime.Now - stT).TotalSeconds > 10)
-                        {
-                            err = true;
-                            break;
-                        }
-                        Thread.Sleep(500);
-                    }
-                    if (err)
-                    {
-                        SysLog.Add(LogLevel.Error, "燒錄升降汽缸作動異常，下定位到位確認超時");
-                        Ins.ExcResult = ExcResult.Error;
-                    }
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認燒錄升降已在下定位 {sen_cyUD_DN} == 1");
-                        Global.PLC.WriteOneData(cyl_UD_DN, 0);
-                        SysLog.Add(LogLevel.Info, $"燒錄升降下降復歸 {cyl_UD_DN} -> 0");
-                    }
-                    NextStep();
-                }
-            });
-            Task.Run(() =>
-            {
-                PState.SignalNext = false;
-                if (PState.IsModeStep)
-                    SysLog.Add(LogLevel.Warning, "步進模式");
-
-                foreach (Instruction ins in InstructionsBurn)
-                {
-                    if (PState.IsCompleted)
-                        return;
-                    bool ex = "燒錄流程".TryCatch(() =>
-                    {
-                        if (PState.IsModeStep)
-                        {
-                            SysLog.Add(LogLevel.Warning, $"{ins.Title}:步進等待...");
-                            while (!PState.SignalNext &&
-                                   !PState.IsReseting && !PState.IsStop)
-                                Thread.Sleep(100);
-                        }
-                        if (PState.IsReseting || PState.IsStop)
-                        {
-                            PState.SetEnd(ExcResult.Abort);
-                            return;
-                        }
-                        int id = ins.ID ?? -1;
-                        string title = ins.Title;
-                        ins?.Execute();
-                        PState.SignalNext = false;
-                        if (ins != null && ins.ExcResult != ExcResult.Success)
-                        {
-                            PState.SetEnd(ins.ExcResult);
-                            return;
-                        }
-                    });
-
-                    if (!ex)
-                    {
-                        PState.SetEnd(ExcResult.Error);
-                        return;
-                    }
-                }
-                //Normal
-                PState.SetEnd(ExcResult.Success);
-            });
-        }
-
         public void ProcedureZBRTResetTest()
         {
             ProcedureState PState = ZBRTTestState;
@@ -646,6 +521,215 @@ namespace WpfApp_TestVISA
             SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
             SysLog.Add(LogLevel.Info, $"{PState.Title}:復歸完成");
         }
+        private void ZBRTTestNGRelease()
+        {
+            const short ng_value = 2;
+            string mem_result = "ZBRT_Signal_Result".GetPLCMem();//M4400
+            SysLog.Add(LogLevel.Warning, $"{ZBRTTestState.Title}:設定NG復歸...");
+            Global.PLC.WriteOneData(mem_result, ng_value);
+            if (CurrentProduct != null)
+                DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
+            ProcedureZBRTResetTest();
+            CurrentProduct = null;
+        }
+        #endregion
+        #region ZBRT Burn Sequence
+        public void ProcedureBurn_ZBRT()
+        {
+            ProcedureState PState = ZBRTBurnState;
+            if (PState.IsBusy)
+            {
+                SysLog.Add(LogLevel.Warning, $"{PState.Title}正在執行，先終止後重啟");
+                return;
+            }
+            PState.SetStart();
+            string sen_cyUD_UP = "ZBRT_Sensor_CyBUD_UP".GetPLCMem();//M4050
+            string sen_cyUD_DN = "ZBRT_Sensor_CyBUD_DN".GetPLCMem();//M4051
+            string cyl_UD_UP = "ZBRT_Cylinder_BUD_UP".GetPLCMem();//M3059
+            string cyl_UD_DN = "ZBRT_Cylinder_BUD_DN".GetPLCMem();//M3060
+            string memReady = "ZBRT_Burn_Ready".GetPLCMem();
+            string mem_burn_result = "ZBRT_Burn_Result".GetPLCMem();//D3021
+            #region ZBRT Burn Instructions
+            InstructionsBurn.Clear();
+            InstructionsBurn.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待燒錄工件放置完畢 {memReady} == 1"),
+            });
+
+            InstructionsBurn.Add(new(1, "汽缸上升程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_DN, (short)1, 2000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:下定位{sen_cyUD_DN} == 1"),
+                OnEnd = (Ins) => {
+                    if (Ins.ExcResult == ExcResult.Success)
+                    {
+                        SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸在下定位");
+                        Thread.Sleep(500);
+                        SysLog.Add(LogLevel.Info, $"燒錄升降汽缸上升 {cyl_UD_UP} -> 1");
+                        Global.PLC.WriteOneData(cyl_UD_UP, 1);
+                        Thread.Sleep(1000);
+                    }
+                    else
+                    {
+                        SysLog.Add(LogLevel.Error, $"升降汽缸不在下定位 {sen_cyUD_DN} == 0");
+                        Ins.ExcResult = ExcResult.Error;
+                        return;
+                    }
+                    SysLog.Add(LogLevel.Info, $"等待升降汽缸上檢知 {sen_cyUD_UP} == 1");
+                    DateTime stT = DateTime.Now; bool err = false;
+                    while (Global.PLC.ReadOneData(sen_cyUD_UP).ReturnValue == 0)
+                    {
+                        if ((DateTime.Now - stT).TotalSeconds > 10)
+                        {
+                            err = true;
+                            break;
+                        }
+                        Thread.Sleep(500);
+                    }
+                    if (err)
+                    {
+                        SysLog.Add(LogLevel.Error, "升降汽缸作動異常，上定位到位確認超時");
+                        Ins.ExcResult = ExcResult.Error;
+                    }
+                    else
+                    {
+                        SysLog.Add(LogLevel.Info, $"確認汽缸已在上定位 {sen_cyUD_UP} == 1");
+                        Global.PLC.WriteOneData(cyl_UD_UP, 0);
+                        SysLog.Add(LogLevel.Info, $"升降汽缸上升復歸 {cyl_UD_UP} -> 0");
+                    }
+
+                }
+            });
+            InstructionsBurn.Add(new(2, "燒錄", Order.Burn, "PathBAT_ZBRT")
+            {
+                OnStart = (Ins) => NextStep(),
+                OnEnd = (Ins) => 
+                {
+                    DispMain?.Invoke(() => CurrentProduct!.BurnCheck = (Ins.ExcResult == ExcResult.Success) ? "V" : "X");
+                    if (Ins.ExcResult != ExcResult.Success)
+                    {
+                        int reT = BurnRetryT;
+                        Instruction insBurnRe = new(101, "燒錄", Order.Burn, "PathBAT_ZBRT");
+                        for (int i = 0; i < reT; i++)
+                        {
+                            SysLog.Add(LogLevel.Warning, "燒錄重試開始...");
+                            Thread.Sleep(500);
+                            insBurnRe.Execute();
+                            Ins.ExcResult = insBurnRe.ExcResult;
+                            if (Ins.ExcResult == ExcResult.Success)
+                                break;
+                        }
+                    }
+                    if (Ins.ExcResult == ExcResult.Success)
+                    {
+                        Global.PLC.WriteOneData(mem_burn_result, 1);
+                        SysLog.Add(LogLevel.Info, $"PLC確認燒錄OK {mem_burn_result} -> 1");
+                    }
+                    else
+                    {
+                        Global.PLC.WriteOneData(mem_burn_result, 2);
+                        SysLog.Add(LogLevel.Warning, $"PLC確認燒錄NG {mem_burn_result} -> 2");
+                    }
+                    NextStep();
+                }
+            });
+            InstructionsBurn.Add(new(3, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查燒錄升降汽缸:上定位 {sen_cyUD_UP} == 1"),
+                OnEnd = (Ins) => {
+                    if (Ins.ExcResult == ExcResult.Success)
+                    {
+                        SysLog.Add(LogLevel.Info, "確認燒錄升降汽缸在上定位");
+                        Thread.Sleep(500);
+                        SysLog.Add(LogLevel.Info, $"燒錄升降汽缸下降 {cyl_UD_DN} -> 1");
+                        Global.PLC.WriteOneData(cyl_UD_DN, 1);
+                        Thread.Sleep(1000);
+                    }
+                    else
+                    {
+                        SysLog.Add(LogLevel.Error, $"燒錄升降汽缸不在上定位 {sen_cyUD_UP} == 0");
+                        Ins.ExcResult = ExcResult.Error;
+                        return;
+                    }
+                    SysLog.Add(LogLevel.Info, $"等待燒錄升降汽缸下檢知 {sen_cyUD_DN} == 1");
+                    DateTime stT = DateTime.Now; bool err = false;
+                    while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
+                    {
+                        if ((DateTime.Now - stT).TotalSeconds > 10)
+                        {
+                            err = true;
+                            break;
+                        }
+                        Thread.Sleep(500);
+                    }
+                    if (err)
+                    {
+                        SysLog.Add(LogLevel.Error, "燒錄升降汽缸作動異常，下定位到位確認超時");
+                        Ins.ExcResult = ExcResult.Error;
+                    }
+                    else
+                    {
+                        SysLog.Add(LogLevel.Info, $"確認燒錄升降已在下定位 {sen_cyUD_DN} == 1");
+                        Global.PLC.WriteOneData(cyl_UD_DN, 0);
+                        SysLog.Add(LogLevel.Info, $"燒錄升降下降復歸 {cyl_UD_DN} -> 0");
+                        NextStep();
+                    }
+                }
+            });
+            #endregion
+            Task.Run(() =>
+            {
+                ResetSteps(1, setStart: true);
+                DispMain?.Invoke(() =>
+                {
+                    CurrentProduct = new() { TimeStart = DateTime.Now };
+                    ProductRecords.Add(CurrentProduct);
+                });
+                PState.SignalNext = false;
+                if (PState.IsModeStep)
+                    SysLog.Add(LogLevel.Warning, "步進模式");
+
+                foreach (Instruction ins in InstructionsBurn)
+                {
+                    if (PState.IsCompleted)
+                        return;
+                    bool ex = "燒錄流程".TryCatch(() =>
+                    {
+                        if (PState.IsModeStep)
+                        {
+                            SysLog.Add(LogLevel.Warning, $"{ins.Title}:步進等待...");
+                            while (!PState.SignalNext &&
+                                   !PState.IsReseting && !PState.IsStop)
+                                Thread.Sleep(100);
+                        }
+                        if (PState.IsReseting || PState.IsStop)
+                        {
+                            PState.SetEnd(ExcResult.Abort);
+                            return;
+                        }
+                        int id = ins.ID ?? -1;
+                        string title = ins.Title;
+                        ins?.Execute();
+                        PState.SignalNext = false;
+                        if (!PState.IsBypassErr && ins != null &&
+                            ins.ExcResult != ExcResult.Success)
+                        {
+                            PState.SetEnd(ins.ExcResult);
+                            ZBRTBurnNGRelease();
+                            return;
+                        }
+                    });
+
+                    if (!ex)
+                    {
+                        PState.SetEnd(ExcResult.Error);
+                        ZBRTBurnNGRelease();
+                        return;
+                    }
+                }
+                //Normal
+                PState.SetEnd(ExcResult.Success);
+            });
+        }
         public void ProcedureZBRTResetBurn()
         {
             string sen_cyUD_UP = "ZBRT_Sensor_CyBUD_UP".GetPLCMem();//M4050
@@ -679,12 +763,24 @@ namespace WpfApp_TestVISA
                     Thread.Sleep(500);
                     while (Global.PLC.ReadOneData(sen_cyUD_DN).ReturnValue == 0)
                         Thread.Sleep(500);
-                    
+
                     Global.PLC.WriteRandomData([cyl_UD_UP, cyl_UD_DN], [0, 0]);
                 }
             }, () => PState.IsReseting = false);
             SysLog.Add(LogLevel.Warning, $"{PState.Title}:確認升降汽缸在下定位");
             SysLog.Add(LogLevel.Warning, $"{PState.Title}:復歸完成");
         }
+        private void ZBRTBurnNGRelease()
+        {
+            const short ng_value = 2;
+            string mem_burn_result = "ZBRT_Burn_Result".GetPLCMem();
+            SysLog.Add(LogLevel.Warning, $"{ZBRTBurnState.Title}:設定NG復歸...");
+            Global.PLC.WriteOneData(mem_burn_result, ng_value); 
+            if (CurrentProduct != null)
+                DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
+            ProcedureZBRTResetBurn();
+            CurrentProduct = null;
+        }
+        #endregion
     }
 }

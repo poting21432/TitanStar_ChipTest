@@ -16,6 +16,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using Convert = System.Convert;
 
 namespace WpfApp_TestVISA
@@ -44,8 +45,8 @@ namespace WpfApp_TestVISA
         internal static TCPCommand? TcpCommand { get; set; }
         public static Model_Main? MMain { get; set; } = null;
 
-       public static void Initialize()
-        {
+        public static void Initialize()
+       {
             _ = Task.Run(() =>
             {
                 InitializeConfig();
@@ -79,8 +80,8 @@ namespace WpfApp_TestVISA
                 Task.Run(async () => await LinkSignalAnalyzer());
                 IsInitialized = true;
             });
-            //*
-            Task.Run(() =>
+            //* 
+            Task.Run(() => //產品自動切換
             {
                 while (!IsInitialized)
                     Thread.Sleep(1000);
@@ -109,6 +110,82 @@ namespace WpfApp_TestVISA
                     });
                 }
             });//*/
+
+            Task.Run(() => //自動狀態到位檢查
+            {
+                while (!IsInitialized)
+                    Thread.Sleep(500);
+                string memReady_G51 = "G51_Signal_Ready".GetPLCMem();
+                string memReady_ZBRT = "ZBRT_Signal_Ready".GetPLCMem();
+                string memReady_BG51 = "G51_Burn_Ready".GetPLCMem();
+                string memReady_BZBRT = "ZBRT_Burn_Ready".GetPLCMem();
+                while (true)
+                {
+                    Thread.Sleep(500);
+                    if (MMain == null || MMain.IsManualMode)
+                        continue;
+                    if (MMain.SelectedProductType == "G51")
+                    {
+                        short value_BG51 = PLC.ReadOneData(memReady_BG51).ReturnValue;
+                        short value_G51 = PLC.ReadOneData(memReady_G51).ReturnValue;
+
+                        if (value_BG51 == 1 && !MMain.G51BurnState.IsBusy && !MMain.G51BurnState.IsReseting)
+                            MMain.ProcedureBurn_G51();
+                        else if (value_G51 == 1 && !MMain.G51TestState.IsBusy && !MMain.G51TestState.IsReseting)
+                            MMain.ProcedureTest_G51();
+                    }
+                    else if (MMain.SelectedProductType == "ZBRT")
+                    {
+                        short value_BZBRT = PLC.ReadOneData(memReady_BZBRT).ReturnValue;
+                        short value_ZBRT = PLC.ReadOneData(memReady_ZBRT).ReturnValue;
+                        if (value_BZBRT == 1 && !MMain.ZBRTBurnState.IsBusy && !MMain.ZBRTBurnState.IsReseting)
+                            MMain.ProcedureBurn_ZBRT();
+                        else if (value_ZBRT == 1 && !MMain.ZBRTTestState.IsBusy && !MMain.ZBRTTestState.IsReseting)
+                            MMain.ProcedureTest_ZBRT();
+                    }
+                }
+            });
+            Task.Run(() => //初始化PLC位置表
+            {
+                while (!IsInitialized || MMain == null)
+                    Thread.Sleep(500);
+                Model_Main.DispMain?.Invoke(() =>
+                {
+                    MMain.PLCAddrData.Clear();
+                    foreach (var addr in PLCAddrs.Values)
+                    {
+                        PLCData data = new() { Id = addr.Id, Address = addr.Address, Title = addr.Title };
+                        MMain.PLCAddrData.Add(data);
+                    }
+                });
+            });
+            Task.Run(() => //PLCIO同步
+            {
+                string[] PLCAddrList = [];
+                while (!IsInitialized || MMain == null || MMain.PLCAddrData.Count != PLCAddrs.Values.Count)
+                    Thread.Sleep(500);
+
+                PLCAddrList = [.. MMain.PLCAddrData.Select(x => x.Address ?? "")];
+                "PLC同步".TryCatch(() =>
+                {
+                    while (true)
+                    {
+                        Thread.Sleep(500);
+                        var result = Global.PLC.ReadRandomData(PLCAddrList);
+                        Model_Main.DispMain?.Invoke(() =>
+                        {
+                            using (Dispatcher.CurrentDispatcher.DisableProcessing())
+                            {
+                                for (int i = 0; i < MMain.PLCAddrData.Count; i++)
+                                {
+                                    if (i < result.ReturnValues.Length)
+                                        MMain.PLCAddrData[i].Status = result.ReturnValues[i];
+                                }
+                            }
+                        });
+                    }
+                });
+            });
         }
         internal static async Task<bool>LinkSignalAnalyzer()
         {
