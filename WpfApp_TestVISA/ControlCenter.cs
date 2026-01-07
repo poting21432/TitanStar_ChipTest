@@ -1,5 +1,4 @@
 ﻿using DeviceDB;
-using Keysight.Visa;
 using PLC;
 using PropertyChanged;
 using Support;
@@ -20,7 +19,7 @@ using System.Threading.Tasks;
 using System.Windows.Threading;
 using Convert = System.Convert;
 
-namespace WpfApp_TestVISA
+namespace WpfApp_TitanStar_TestPlatform
 {
     [AddINotifyPropertyChangedInterface]
     public static class Global
@@ -111,7 +110,18 @@ namespace WpfApp_TestVISA
                 if (RFDisplay != null)
                     RFDisplay.CommandReconnect = new RelayCommand<object>((obj) =>
                     {
-                        Task.Run(async () => await LinkSignalAnalyzer());
+                        Task.Run(async () =>
+                        {
+                            await LinkSignalAnalyzer();
+                            await Model_Main.PrepareRF();
+                            if(TcpCommand !=null)
+                            {
+                                string[] recv1 = await TcpCommand.SendAndReceiveTokenAsync(":ABORt\r\n", "SCPI", CtsTCP.Token);
+                                string[] recv2 = await TcpCommand.SendAndReceiveTokenAsync(":TRIG:TXP:SOUR IMM\r\n", "SCPI", CtsTCP.Token);
+                                string[] recv3 = await TcpCommand.SendAndReceiveTokenAsync(":FETC:BPOW?\r\n", "SCPI", CtsTCP.Token);
+                            }
+                        });
+
                     });
                 RFDisplay?.CommandReconnect?.Execute(null);
                 IsInitialized = true;
@@ -255,6 +265,7 @@ namespace WpfApp_TestVISA
                 string[] info = recv[0].Replace("\n", "").Trim().Split("\r");
                 if(info.Length >= 3)
                     SysLog.Add(LogLevel.Info, $"頻譜儀型號:{info[2]}");
+                
             }
             else RFDisplay?.SetState(DeviceState.Error);
             return isC;
@@ -321,7 +332,7 @@ namespace WpfApp_TestVISA
             return sr.ReadToEnd();
         }
     }
-    public static class Extensions
+    public static partial class Extensions
     {
         public static string GetPLCMem(this string ID)
         {

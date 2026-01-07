@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Support", "Support\Support.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp.Themes.BlueEX", "WpfApp.Themes.BlueEX\WpfApp.Themes.BlueEX.csproj", "{5960A484-0943-49F2-B7DB-9732F4FB87F1}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp_TestVISA", "WpfApp_TestVISA\WpfApp_TestVISA.csproj", "{F6A910F4-4486-402F-8DFA-634F871F5A46}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfApp_TitanStar_TestPlatform", "WpfApp_TestVISA\WpfApp_TitanStar_TestPlatform.csproj", "{F6A910F4-4486-402F-8DFA-634F871F5A46}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PLC", "PLC\PLC.csproj", "{DCB41EAC-D25C-4886-BD15-6B684964C38C}"
 EndProject

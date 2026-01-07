@@ -21,17 +21,6 @@
     <ProjectReference Include="..\WpfApp.Themes.BlueEX\WpfApp.Themes.BlueEX.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="Ivi.Visa">
-      <HintPath>..\..\..\..\..\..\Program Files\IVI Foundation\VISA\Microsoft.NET\Framework64\v2.0.50727\VISA.NET Shared Components 7.2.0\Ivi.Visa.dll</HintPath>
-    </Reference>
-    <Reference Include="Keysight.Visa">
-      <HintPath>..\..\..\..\..\..\Program Files\Keysight\IO Libraries Suite\Keysight.Visa.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="devcon.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Update="G51_BAT\20250520_ZB_SPMG50_V2.0.1.s37">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

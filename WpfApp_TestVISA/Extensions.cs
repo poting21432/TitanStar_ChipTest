@@ -6,9 +6,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace WpfApp_TestOmron
+namespace WpfApp_TitanStar_TestPlatform
 {
-    public static class Extensions
+    public static partial class Extensions
     {
         public static string ToVisaVxi11(this string ipOrHost)
         {
@@ -34,7 +34,7 @@ namespace WpfApp_TestOmron
         }
 
         public static string GetHexFormat(this string MemortyType, int StartMemory, int ShiftBit) =>
-            $"{MemortyType}{(StartMemory + ShiftBit / 16):D3}.{ShiftBit % 16:D2}";
+            $"{MemortyType}{StartMemory + ShiftBit / 16:D3}.{ShiftBit % 16:D2}";
         static Extensions()
         {
             if(File.Exists("./StatusCode.csv"))

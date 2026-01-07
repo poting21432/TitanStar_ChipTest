@@ -1,9 +1,9 @@
-﻿<UserControl x:Class="WpfApp_TestVISA.UserControls.UserControl_Version"
+﻿<UserControl x:Class="WpfApp_TitanStar_TestPlatform.UserControls.UserControl_Version"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
-             xmlns:local="clr-namespace:WpfApp_TestVISA.UserControls"
+             xmlns:local="clr-namespace:WpfApp_TitanStar_TestPlatform.UserControls"
              mc:Ignorable="d">
     <UserControl.Resources>
         <ResourceDictionary>

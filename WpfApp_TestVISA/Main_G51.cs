@@ -14,7 +14,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace WpfApp_TestVISA
+namespace WpfApp_TitanStar_TestPlatform
 {
     public partial class Model_Main
     {

@@ -11,7 +11,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-namespace WpfApp_TestVISA
+namespace WpfApp_TitanStar_TestPlatform
 {
     /// <summary>
     /// Interaction logic for MainWindow.xaml

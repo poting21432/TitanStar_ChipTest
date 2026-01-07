@@ -13,7 +13,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace WpfApp_TestVISA.UserControls
+namespace WpfApp_TitanStar_TestPlatform.UserControls
 {
     /// <summary>
     /// UserControl_Version.xaml 的互動邏輯

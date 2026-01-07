@@ -6,7 +6,7 @@ using System.Configuration;
 using System.Data;
 using System.Windows;
 using System.Windows.Controls;
-namespace WpfApp_TestVISA
+namespace WpfApp_TitanStar_TestPlatform
 {
     /// <summary>
     /// Interaction logic for App.xaml

@@ -1,5 +1,4 @@
 ﻿using DeviceDB;
-using Keysight.Visa;
 using Modbus.Device;
 using PLC;
 using PropertyChanged;
@@ -22,10 +21,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using WpfApp_TestOmron;
-using WpfApp_TestVISA;
-using ResourceManager = Keysight.Visa.ResourceManager;
-namespace WpfApp_TestVISA
+using WpfApp_TitanStar_TestPlatform;
+namespace WpfApp_TitanStar_TestPlatform
 {
     [AddINotifyPropertyChangedInterface]
     public partial class Model_Main
@@ -358,7 +355,7 @@ namespace WpfApp_TestVISA
             Command_TestN9000B = new RelayCommand<object>(async (obj) => await PrepareRF());
             Command_ReadN9000B = new RelayCommand<object>(async (obj) => await ReadRFValue());
         }
-        private static async Task<bool> PrepareRF()
+        internal static async Task<bool> PrepareRF()
         {
             DeviceDisplay? RFDisplay = null;
             ///*RST 重置資料 //提前做
@@ -398,7 +395,7 @@ namespace WpfApp_TestVISA
                 return false;
             }
         }
-        private static async Task<double> ReadRFValue()
+        internal static async Task<double> ReadRFValue()
         {
             ///:ABORt 中斷下一次輪詢
             ///:FETC:BPOW? 做完後
@@ -426,12 +423,13 @@ namespace WpfApp_TestVISA
                 if(ret2.Length >= 2)
                 {
                     string[] data = ret2[1].Split(',');
-                    if(data.Length >=3)
+                    if (data.Length >= 3)
                     {
                         SysLog.Add(LogLevel.Info, $"頻譜儀回應: 輸出{data[2].ToDouble():F3} dBm");
                         RFDisplay?.SetState(DeviceState.Connected);
                         return data[2].ToDouble();
                     }
+                    else SysLog.Add(LogLevel.Error, $"頻譜儀回應: 無檢測數據");
                 }
                 else SysLog.Add(LogLevel.Error, $"頻譜儀回應: 無檢測數據");
 

@@ -15,9 +15,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Media;
-using WpfApp_TestOmron;
 
-namespace WpfApp_TestVISA
+namespace WpfApp_TitanStar_TestPlatform
 {
     public enum Order
     {

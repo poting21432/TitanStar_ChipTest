@@ -14,14 +14,13 @@
   <Var name="AnalyzeXaml" value="true" />
   <Var name="UseUnicodeNames" value="false" />
   <Var name="UseKoreanNames" value="true" />
-  <Module file="$(InPath)\WpfApp_TestVISA.dll">
+  <Module file="$(InPath)\WpfApp_TitanStar_TestPlatform.dll">
     <SkipType name="*AnonymousType*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" skipStringHiding="true" />
   </Module>
   <AssemblySearchPath path="..\DeviceDB\bin\Release\net8.0-windows\" />
   <AssemblySearchPath path="..\PLC\bin\Release\net6.0\" />
   <AssemblySearchPath path="..\Support\bin\Release\net8.0-windows7.0\" />
   <AssemblySearchPath path="..\WpfApp.Themes.BlueEX\bin\Release\net8.0-windows7.0\" />
-  <AssemblySearchPath path="..\WpfApp_TestVISA\" />
   <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.20\ref\net8.0\" />
   <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.WindowsDesktop.App.Ref\8.0.20\ref\net8.0\" />
   <AssemblySearchPath path="C:\Users\user\.nuget\packages\ini-parser-netstandard\2.5.3\lib\netstandard2.0\" />
