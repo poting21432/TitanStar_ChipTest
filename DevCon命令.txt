@@ -1,0 +1,12 @@
+找所有序列埠
+./devcon find =Ports
+
+停用指定裝置 @前綴避免轉譯問題
+./devcon disable "@USB\VID_1366&PID_1024&MI_00\7&1B44C51B&0&0000"
+啟用指定裝置 @前綴避免轉譯問題
+./devcon enable "@USB\VID_1366&PID_1024&MI_00\7&1B44C51B&0&0000"
+
+ZBRT(右)
+"@USB\VID_1366&PID_1024&MI_00\7&1B44C51B&0&0000"
+G51(右)
+"@USB\VID_1366&PID_1024&MI_00\7&2B31BD48&0&0000"

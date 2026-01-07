@@ -31,10 +31,10 @@ namespace WpfApp_TestVISA
             "完成並記錄資訊"
         ];
         #region ZBRT Related Commands
-        public ICommand Command_ZBRT_3VON { get; set; }
-        public ICommand Command_ZBRT_5VON { get; set; }
-        public ICommand Command_ZBRT_LowV { get; set; }
-        public ICommand Command_ZBRT_OFF { get; set; }
+        public ICommand? Command_ZBRT_3VON { get; set; }
+        public ICommand? Command_ZBRT_5VON { get; set; }
+        public ICommand? Command_ZBRT_LowV { get; set; }
+        public ICommand? Command_ZBRT_OFF { get; set; }
         private void InitializeCommands_ZBRT()
         {
             Command_ZBRT_3VON = new RelayCommand<object>((obj) =>

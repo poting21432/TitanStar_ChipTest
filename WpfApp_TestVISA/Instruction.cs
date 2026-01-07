@@ -172,16 +172,24 @@ namespace WpfApp_TestVISA
                 throw new Exception($"{InstructionMessage}: 參數為空值");
             SerialPort port = Global.ModbusPort ?? throw new Exception($"電表序列埠未設定");
 
-            if (port.IsOpen)
+            ExcResult result = ExcResult.Success;
+            try
+            {
+                if (port.IsOpen)
+                    port.Close();
+                port.Open();
+                port.WriteTimeout = 1000;
+                port.ReadTimeout = 1000;
+                byte slaveId = 1;
+                var master = ModbusSerialMaster.CreateRtu(port);
+                master.WriteMultipleRegisters(slaveId, regAddr, [value]);
                 port.Close();
-            port.Open();
-            port.WriteTimeout = 1000;
-            port.ReadTimeout = 1000;
-            byte slaveId = 1;
-            var master = ModbusSerialMaster.CreateRtu(port);
-            master.WriteMultipleRegisters(slaveId, regAddr, [value]);
-            port.Close();
-            return ExcResult.Success;
+            }catch(Exception ex)
+            {
+                SysLog.Add(LogLevel.Error, $"電表通訊異常:{ex.Message}");
+                result = ExcResult.Error;
+            }
+            return result;
         }
         private float ReadModbusFloat()
         {

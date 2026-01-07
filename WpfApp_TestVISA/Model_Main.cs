@@ -30,7 +30,14 @@ namespace WpfApp_TestVISA
     [AddINotifyPropertyChangedInterface]
     public partial class Model_Main
     {
-        public static Dispatcher? DispMain;
+
+        internal Dictionary<string, DeviceDisplay> DevStateMap { get; set; } = [];
+        public ObservableCollection<DeviceDisplay> DeviceStates { get; set; } = 
+        [
+            new("PLC"), new("頻譜儀"), new("電表")
+        ];
+
+        internal static Dispatcher? DispMain;
         public string WriteData { get; set; } = "*IDN?";
         public bool EnConnect { get; set; } = true;
         public string TextConnect { get; set; } = "連線";
@@ -152,6 +159,7 @@ namespace WpfApp_TestVISA
         public Model_Main()
         {
             IsManualMode = true;
+            DevStateMap = DeviceStates.ToDictionary(x => x.Title);
             G51BurnState.ResetState("G51燒錄程序");
             G51TestState.ResetState("G51測試程序");
             ZBRTBurnState.ResetState("ZBRT燒錄程序");
@@ -233,24 +241,34 @@ namespace WpfApp_TestVISA
             {
                 G51TestState.SignalNext = true;
             });
+            DevStateMap.TryGetValue("電表", out DeviceDisplay? PMDisplay);
             Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
             {
+                PMDisplay?.SetState(DeviceState.Connecting);
                 Instruction ins1 =(new(1, "切電表至低量程", Order.SendModbus, [(ushort)0x001F, (ushort)1])
                 {
                     OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至低量程:(0x001F)->1")
                 });
                 ins1.Execute();
+                if(ins1.ExcResult == ExcResult.Success)
+                    PMDisplay?.SetState(DeviceState.Connected);
+                else PMDisplay?.SetState(DeviceState.Error);
             });
             Command_SetPowerMeter_High = new RelayCommand<object>((obj) =>
             {
+                PMDisplay?.SetState(DeviceState.Connecting);
                 Instruction ins1 = new(1, "切電表至高量程", Order.SendModbus, [(ushort)0x001F, (ushort)2])
                 {
                     OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至高量程:(0x001F)->2")
                 };
                 ins1.Execute();
+                if (ins1.ExcResult == ExcResult.Success)
+                    PMDisplay?.SetState(DeviceState.Connected);
+                else PMDisplay?.SetState(DeviceState.Error);
             });
             Command_TestPowerMeter_Low = new RelayCommand<object>((obj) =>
             {
+                PMDisplay?.SetState(DeviceState.Connecting);
                 Instruction ins1 = new(1, "檢查電表為低量程", Order.WaitModbus, [(ushort)0x36, (ushort)0, 5000])
                 {
                     OnStart = (Ins) => SysLog.Add(LogLevel.Info, "檢查電表為低量程:(0x36) == 0"),
@@ -264,7 +282,11 @@ namespace WpfApp_TestVISA
                 };
                 ins1.Execute();
                 if (ins1.ExcResult != ExcResult.Success)
+                {
+                    PMDisplay?.SetState(DeviceState.Error);
                     return;
+                }
+                PMDisplay?.SetState(DeviceState.Transporting);
                 Instruction ins2 =(new(2, "讀電表值(低量程)", Order.ReadModbusFloat, [(ushort)0x0032])
                 {
                     OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取低量程電表數值:(0x32)"),
@@ -280,38 +302,50 @@ namespace WpfApp_TestVISA
                     }
                 });
                 ins2.Execute();
+                PMDisplay?.SetState(DeviceState.Connected);
             });
             Command_TestPowerMeter_High = new RelayCommand<object>((obj) =>
             {
+                DevStateMap.TryGetValue("電表", out DeviceDisplay? PMDisplay);
                 Instruction ins1 = (new(2, "檢查電表為高量程", Order.WaitModbus, [(ushort)0x36, (ushort)1, 5000])
                 {
-                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "檢查電表為高量程:(0x36) == 1"),
+                    OnStart = (Ins) =>
+                    {
+                        PMDisplay?.SetState(DeviceState.Connecting);
+                        SysLog.Add(LogLevel.Info, "檢查電表為高量程:(0x36) == 1");
+                    },
                     OnEnd = (Ins) =>
                     {
                         if (Ins.ExcResult == ExcResult.Success)
                             SysLog.Add(LogLevel.Info, "已確認電表: 高量程");
                         else
                             SysLog.Add(LogLevel.Error, "電表量程檢查失敗");
+                        
                     }
-                });
+                }); 
                 ins1.Execute();
                 if (ins1.ExcResult != ExcResult.Success)
-                    return;
-                Instruction ins2 = (new(1, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x0030])
                 {
-                    OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x30)"),
-                    OnEnd = (Ins) =>
+                    PMDisplay?.SetState(DeviceState.Error);
+                    return;
+                }
+                PMDisplay?.SetState(DeviceState.Transporting);
+                Instruction ins2 = (new(1, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x0030])
                     {
-                        float? uA = Ins.Result as float?;
-                        if (!uA.HasValue)
-                            Ins.ExcResult = ExcResult.Error;
-                        if (Ins.ExcResult == ExcResult.Success)
-                            SysLog.Add(LogLevel.Info, $"讀取電表數值(高量程):{Ins.Result}mA");
-                        else
-                            SysLog.Add(LogLevel.Error, "電表數值異常");
-                    }
-                });
+                        OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x30)"),
+                        OnEnd = (Ins) =>
+                        {
+                            float? uA = Ins.Result as float?;
+                            if (!uA.HasValue)
+                                Ins.ExcResult = ExcResult.Error;
+                            if (Ins.ExcResult == ExcResult.Success)
+                                SysLog.Add(LogLevel.Info, $"讀取電表數值(高量程):{Ins.Result}mA");
+                            else
+                                SysLog.Add(LogLevel.Error, "電表數值異常");
+                        }
+                    });
                 ins2.Execute();
+                PMDisplay?.SetState(DeviceState.Connected);
             });
             Command_TestBurn = new RelayCommand<object>((obj) =>
             {
@@ -326,16 +360,25 @@ namespace WpfApp_TestVISA
         }
         private static async Task<bool> PrepareRF()
         {
+            DeviceDisplay? RFDisplay = null;
             ///*RST 重置資料 //提前做
             ///*RCL 1 命令Recall File 1
             ///:INIT:CONT OFF 停用量測
             try
             {
+                Global.MMain?.DevStateMap.TryGetValue("頻譜儀", out RFDisplay);
+                RFDisplay?.SetState(DeviceState.Connecting);
                 if (!Global.TcpCommand?.IsConnected ?? true)
                 {
                     bool isC = await Global.LinkSignalAnalyzer();
-                    if (!isC) return false;
+                    if (!isC)
+                    {
+                        RFDisplay?.SetState(DeviceState.Error);
+                        return false;
+                    }
+                    RFDisplay?.SetState(DeviceState.Connected);
                 }
+                RFDisplay?.SetState(DeviceState.Transporting);
                 await Global.TcpCommand!.SendAndReceiveTokenAsync("*RST\r\n", "SCPI");
                 SysLog.Add(LogLevel.Info, "頻譜儀重置");
                 //Thread.Sleep(1000);
@@ -344,12 +387,14 @@ namespace WpfApp_TestVISA
 
                 await Global.TcpCommand.SendAndReceiveTokenAsync(":INIT:CONT OFF\r\n", "SCPI");
                 Thread.Sleep(500);
-                SysLog.Add(LogLevel.Warning, "頻譜儀準備完成");
+                SysLog.Add(LogLevel.Warning, "頻譜儀準備完成"); 
+                RFDisplay?.SetState(DeviceState.Connected);
                 return true;
             }
             catch (Exception ex)
             {
                 SysLog.Add(LogLevel.Error, $"頻譜儀通訊異常:{ex.Message}");
+                RFDisplay?.SetState(DeviceState.Error);
                 return false;
             }
         }
@@ -357,13 +402,23 @@ namespace WpfApp_TestVISA
         {
             ///:ABORt 中斷下一次輪詢
             ///:FETC:BPOW? 做完後
+            DeviceDisplay? RFDisplay = null;
             try
             {
+                
+                Global.MMain?.DevStateMap.TryGetValue("頻譜儀", out RFDisplay);
                 if (!Global.TcpCommand?.IsConnected ?? true)
                 {
+                    RFDisplay?.SetState(DeviceState.Connecting);
                     bool isC = await Global.LinkSignalAnalyzer();
-                    if (!isC) return double.NaN;
+                    if (!isC)
+                    {
+                        RFDisplay?.SetState(DeviceState.Error);
+                        return double.NaN;
+                    }
+                    RFDisplay?.SetState(DeviceState.Connected);
                 }
+                RFDisplay?.SetState(DeviceState.Transporting);
                 await Global.TcpCommand!.ClearReadBuffer(Global.CtsTCP.Token);
                 string[] ret1 = await Global.TcpCommand.SendAndReceiveTokenAsync(":ABOR\r\n", "SCPI", Global.CtsTCP.Token);
                 SysLog.Add(LogLevel.Info, "讀取開始");
@@ -374,15 +429,20 @@ namespace WpfApp_TestVISA
                     if(data.Length >=3)
                     {
                         SysLog.Add(LogLevel.Info, $"頻譜儀回應: 輸出{data[2].ToDouble():F3} dBm");
+                        RFDisplay?.SetState(DeviceState.Connected);
                         return data[2].ToDouble();
                     }
                 }
                 else SysLog.Add(LogLevel.Error, $"頻譜儀回應: 無檢測數據");
+
+                RFDisplay?.SetState(DeviceState.Connected);
                 return double.NaN;
             }
             catch(Exception ex)
             {
                 SysLog.Add(LogLevel.Error, $"頻譜儀通訊異常:{ex.Message}");
+
+                RFDisplay?.SetState(DeviceState.Error);
                 return double.NaN;
             }
             
@@ -506,6 +566,44 @@ namespace WpfApp_TestVISA
                 return;
             }
             Task.Run (()=> Global.PLC.WriteOneData(Address, value));
+        }
+    }
+
+    public enum DeviceState
+    {
+        DisConnect,
+        Connecting,
+        Connected,
+        Transporting,
+        Error
+    }
+    [AddINotifyPropertyChangedInterface]
+    public class DeviceDisplay(string Title)
+    {
+        public string Title { get; set; } = Title;
+        public SolidColorBrush BrushState { get; set; } = Brushes.Transparent;
+        public DeviceState State { get; set; } = DeviceState.DisConnect;
+        public Visibility VisbReconnect { get; set; } = Visibility.Collapsed;
+        public ICommand? CommandReconnect { get; set; }
+
+        public void SetState(DeviceState state)
+        {
+            Model_Main.DispMain?.Invoke(() =>
+            {
+                State = state;
+                BrushState = (State) switch
+                {
+                    DeviceState.DisConnect => Brushes.Transparent,
+                    DeviceState.Connecting => Brushes.Blue,
+                    DeviceState.Connected => Brushes.LightGreen,
+                    DeviceState.Transporting => Brushes.Green,
+                    _ => Brushes.Red
+                };
+                if (State == DeviceState.Error)
+                    VisbReconnect = Visibility.Visible;
+                else
+                    VisbReconnect = Visibility.Collapsed;
+            });
         }
     }
 }

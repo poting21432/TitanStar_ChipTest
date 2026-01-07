@@ -1,0 +1,21 @@
+﻿<UserControl x:Class="WpfApp_TestVISA.UserControls.UserControl_Version"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:WpfApp_TestVISA.UserControls"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary x:Name="Resource_BlueEx" Source="/WpfApp.Themes.BlueEX;component/BlueEx/Pack.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" HorizontalAlignment="Right" >
+        <Image Source="/WpfApp_TestVISA;component/UserControls/Misc/Symbol.png" Width="25" Height="25"/>
+        <TextBlock Text="Hong Wei Automation Technology Corp ® 紅偉自動化科技有限公司 版權所有 版本號: " FontSize="20" />
+        <TextBlock Text="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:UserControl_Version}},Path=Version,NotifyOnSourceUpdated=True, UpdateSourceTrigger=PropertyChanged}"
+                   FontSize="20" FontWeight="ExtraBold"/>
+    </StackPanel>
+</UserControl>

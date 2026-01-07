@@ -29,6 +29,9 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <None Update="devcon.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="G51_BAT\20250520_ZB_SPMG50_V2.0.1.s37">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
