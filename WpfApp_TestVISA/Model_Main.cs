@@ -458,9 +458,17 @@ namespace WpfApp_TitanStar_TestPlatform
                     {
                         SysLog.Add(LogLevel.Info, $"確認閃爍{Count}次");
                         ExtAction?.Invoke();
-                        Thread.Sleep(300);
+                        Thread.Sleep(800);
                     }
                 }
+            });
+        }
+        public void ErrorStep()
+        {
+            DispMain?.Invoke(() =>
+            {
+                MapSteps.TryGetValue(CurrentStepID, out var step);
+                step?.SetError();
             });
         }
         public void NextStep()

@@ -46,7 +46,7 @@ namespace WpfApp_TitanStar_TestPlatform
         internal static TCPCommand? TcpCommand { get; set; }
         public static Model_Main? MMain { get; set; } = null;
 
-        public static void Initialize()
+        public static void Initialize(Action? OnInitialized)
        {
             _ = Task.Run(() =>
             {
@@ -102,8 +102,11 @@ namespace WpfApp_TitanStar_TestPlatform
 
                 foreach (var path in BATPath.Values)
                     SysLog.Add(LogLevel.Info, $"{path.Title}:{path.Value}");
-                KeysightDeviceIP = Configs["KeysightDeviceIP"].Value ?? "";
-                KeysightDevicePort = Configs["KeysightDevicePort"].Value?.ToInt() ?? 5023;
+
+                Configs.TryGetValue("KeysightDeviceIP", out Config? c_devIP);
+                KeysightDeviceIP = c_devIP?.Value ?? "";
+                Configs.TryGetValue("KeysightDevicePort", out Config? c_devPort);
+                KeysightDevicePort = c_devPort?.Value?.ToInt() ?? 5023;
                 
                 DeviceDisplay? RFDisplay = null;
                 MMain?.DevStateMap.TryGetValue("頻譜儀", out RFDisplay);
@@ -125,6 +128,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     });
                 RFDisplay?.CommandReconnect?.Execute(null);
                 IsInitialized = true;
+                OnInitialized?.Invoke();
             });
             //* 
             Task.Run(() => //產品自動切換

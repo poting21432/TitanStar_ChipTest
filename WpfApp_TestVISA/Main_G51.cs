@@ -5,6 +5,7 @@ using Support.Wpf.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Reflection.Metadata;
 using System.Text;
@@ -13,6 +14,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using WpfApp_TitanStar_TestPlatform;
 
 namespace WpfApp_TitanStar_TestPlatform
 {
@@ -132,6 +134,37 @@ namespace WpfApp_TitanStar_TestPlatform
             string sen_reed = "G51_Sensor_CyReed".GetPLCMem(); //M4002
 
             string mem_result = "G51_Signal_Result".GetPLCMem();//M4400
+            Instruction ins_pho_check4 = new(38, $"閃爍檢測4次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)4, 15000])
+            {
+                OnStart = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
+                    SysLog.Add(LogLevel.Info, $"閃爍檢測 4次: {photoresistor} ^v 1");
+                },
+                OnEnd = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.Success;
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else Thread.Sleep(300);
+                }
+            };
+            Instruction ins_pho_check1 = new(38, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
+            {
+                OnStart = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
+                    SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1");
+                },
+                OnEnd = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.Success;
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else Thread.Sleep(300);
+                }
+            };
+
             //*
             Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
@@ -192,7 +225,6 @@ namespace WpfApp_TitanStar_TestPlatform
 
                 }
             });
-
             Instructions.Add(new(12, "切電表至高量程", Order.SendModbus, [(ushort)0x001F, (ushort)2])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, "設定電表至高量程:(0x001F)->2")
@@ -215,121 +247,114 @@ namespace WpfApp_TitanStar_TestPlatform
                     NextStep();//->"等待電表汽缸上升"
                     SysLog.Add(LogLevel.Info, $"測試開關汽缸上升{cyl_switchTest} -> 1");
                 },
-                OnEnd = (Ins) => Thread.Sleep(2000)
+                OnEnd = (Ins) => Thread.Sleep(1000)
             });
             Instructions.Add(new(14, "導通3V", Order.Custom)
             {
                 OnStart = (Ins) =>
                 {
+                    NextStep(); //->"3V導通 LED閃爍檢測"
                     SysLog.Add(LogLevel.Info, $"導通3V {v3_pos}->1 {v3_neg}->1");
+                    CreatePhoTask(ins_pho_check4);
                     Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
                     DispMain?.Invoke(() => G51_Supply = "3V");
                 },
-                OnEnd = (Ins) => {
-                    Thread.Sleep(100);
-                    Ins.ExcResult = ExcResult.Success;
-                    NextStep(); //->"3V導通 LED閃爍檢測"
-                }
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("3V測試導通", Ins, ins_pho_check4,
+                         () => CurrentProduct!.OnCheck = "V",
+                         () => CurrentProduct!.OnCheck = "X")
             });
-            AddSigCount(15, photoresistor, 4, () => DispMain?.Invoke(() => CurrentProduct!.OnCheck = "V"), 10000);
+            
             Instructions.Add(new(16, $"測試開關汽缸下降 {cyl_switchTest} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_switchTest, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"測試開關汽缸下降 {cyl_switchTest} -> 0"),
-                OnEnd = (Ins) => Thread.Sleep(2000)
+                OnEnd = (Ins) => Thread.Sleep(500)
             });
             Instructions.Add(new(17, $"IO點位測試導通 {pin_DIO} -> 1", Order.SendPLCSignal, [Global.PLC, pin_DIO, (short)1])
             {
                 OnStart = (Ins) => {
                     NextStep();//-> "DIO探針LED檢測
+                    CreatePhoTask(ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"IO點位測試導通 {pin_DIO} -> 1");
-                }
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("DIO斷開", Ins, ins_pho_check1,
+                        null,() => CurrentProduct!.DIOCheck = "X")
             });
-            AddSigCount(18, photoresistor, 1);
             Instructions.Add(new(19, $"IO點位測試關閉 {pin_DIO} -> 0", Order.SendPLCSignal, [Global.PLC, pin_DIO, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"IO點位測試關閉 {pin_DIO} -> 0"),
+                OnStart = (Ins) =>
+                {
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"IO點位測試關閉 {pin_DIO} -> 0");
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("DIO斷開", Ins, ins_pho_check1,
+                        () => CurrentProduct!.DIOCheck = "V",
+                        () => CurrentProduct!.DIOCheck = "X")
             });
-            AddSigCount(20, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.DIOCheck = "V"));
             Instructions.Add(new(21, $"指撥開關-1導通 {pin_switch1} -> 1", Order.SendPLCSignal, [Global.PLC, pin_switch1, (short)1])
             {
                 OnStart = (Ins) =>
                 {
                     NextStep(); //-> "指撥1 - LED檢測"
+                    CreatePhoTask(ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"指撥開關-1導通 {pin_switch1} -> 1");
-                }
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("指撥-1導通", Ins, ins_pho_check1,
+                        null, () => CurrentProduct!.Switch1Check = "X")
             });
-            AddSigCount(22, photoresistor, 1);
             Instructions.Add(new(23, $"指撥開關-1斷開 {pin_switch1} -> 0", Order.SendPLCSignal, [Global.PLC, pin_switch1, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"指撥開關-1斷開 {pin_switch1} -> 0"),
+                OnStart = (Ins) =>
+                {
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"指撥開關-1斷開 {pin_switch1} -> 0");
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("指撥-1斷開", Ins, ins_pho_check1,
+                        () => CurrentProduct!.Switch1Check = "V",
+                        () => CurrentProduct!.Switch1Check = "X")
             });
-            AddSigCount(24, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.Switch1Check = "V"));
             Instructions.Add(new(25, $"指撥開關-2導通 {pin_switch2}-> 1", Order.SendPLCSignal, [Global.PLC, pin_switch2, (short)1])
             {
                 OnStart = (Ins) =>
                 {
                     NextStep(); //-> "指撥2 - LED檢測"
+                    CreatePhoTask(ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"指撥開關-2導通 {pin_switch2}-> 1");
-                }
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("指撥-2導通", Ins, ins_pho_check1,
+                        null, () => CurrentProduct!.Switch2Check = "X")
             });
-            AddSigCount(26, photoresistor, 1);
             Instructions.Add(new(27, $"指撥開關-2斷開 {pin_switch2} -> 0", Order.SendPLCSignal, [Global.PLC, pin_switch2, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"指撥開關-2斷開 {pin_switch2} -> 0"),
-            });
-            AddSigCount(28, photoresistor, 1, () => DispMain?.Invoke(() => CurrentProduct!.Switch2Check = "V"));
-            Instructions.Add(new(29, $"蓋開升降汽缸下降 {cyl_cover}-> 1", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)1])
-            {
                 OnStart = (Ins) => {
-                    NextStep(); //-> "蓋開 - LED檢測"
-                    SysLog.Add(LogLevel.Info, $"蓋開升降汽缸下降 {cyl_cover}-> 1");
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"指撥開關-2斷開 {pin_switch2} -> 0");
                 },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("指撥-2斷開", Ins, ins_pho_check1,
+                        () => CurrentProduct!.Switch2Check = "V",
+                        () => CurrentProduct!.Switch2Check = "X")
             });
-            AddSigCount(30, photoresistor, 1);
-            Instruction ins_pho_check = new(38, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
+            Instructions.Add(new(29, $"蓋開升降汽缸下降 {cyl_cover}-> 1", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)1])
             {
                 OnStart = (Ins) =>
                 {
-                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
-                    SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1");
+                    NextStep(); //-> "蓋開 - LED檢測"
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"蓋開升降汽缸下降 {cyl_cover}-> 1");
                 },
-                OnEnd = (Ins) =>
-                {
-                    Ins.ExcResult = ExcResult.Success;
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
-                        Thread.Sleep(300);
-                    }
-                }
-            };
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("蓋開下降", Ins, ins_pho_check1, 
+                null, () => CurrentProduct!.CoverCheck = "X")
+            });
+
             Instructions.Add(new(31, $"蓋開汽缸上升 {cyl_cover} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)0])
             {
                 OnStart = (Ins) => {
-                    Task.Run(() =>  ins_pho_check.Execute());
+                    CreatePhoTask(ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"蓋開汽缸上升 {cyl_cover} -> 0");
                 },
                 OnEnd = (Ins) =>
-                {
-                    while (ins_pho_check.ExcResult != ExcResult.Success)
-                    {
-                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
-                        {
-                            Ins.ExcResult = ExcResult.Error;
-                            break;
-                        }
-                        Thread.Sleep(200);
-                    }
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "蓋開汽缸光敏檢知異常");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, "蓋開汽缸光敏檢知確認");
-                        DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V");
-                    }
-                }
+                    Ins.ExcResult = WaitPhoCheck("蓋開汽缸上升", Ins, ins_pho_check1,
+                        () => CurrentProduct!.CoverCheck = "V",
+                        () => CurrentProduct!.CoverCheck = "X")
             });
             Instructions.Add(new(33, "檢查電表為高量程", Order.WaitModbus, [(ushort)0x36, (ushort)1, 5000])
             {
@@ -346,17 +371,17 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 OnStart = (Ins) =>
                 {
+                    CreatePhoTask(ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"導通5V {v5_pos}->1 {v5_neg}->1");
                     Global.PLC.WriteRandomData([v5_pos, v5_neg], [1, 1]);
                     DispMain?.Invoke(() => G51_Supply = "5V");
                 },
                 OnEnd = (Ins) => {
-                    Thread.Sleep(100);
-                    Ins.ExcResult = ExcResult.Success;
                     NextStep();
+                    Ins.ExcResult = WaitPhoCheck("導通5V", Ins, ins_pho_check1);
                 }
             });
-            AddSigCount(33, photoresistor, 1);
+
             Instructions.Add(new(34, "讀電表值(高量程)", Order.ReadModbusFloat, [(ushort)0x0030])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, "讀取高量程電表數值:(0x0030)"),
@@ -365,9 +390,9 @@ namespace WpfApp_TitanStar_TestPlatform
                     float? v = Ins.Result as float?;
                     if (!v.HasValue)
                         Ins.ExcResult = ExcResult.Error;
-                    if (v > 2.0)
+                    else if (Math.Abs(v.Value) > 2.0)
                     {
-                        SysLog.Add(LogLevel.Warning, $"電表數值過高(高量程 < 2.0):{Ins.Result}mA");
+                        SysLog.Add(LogLevel.Warning, $"電表數值過高(Abs(電壓)< 2.0):{Ins.Result}mA");
                         Ins.ExcResult = ExcResult.Error;
                     }
                     if (Ins.ExcResult == ExcResult.Success)
@@ -379,84 +404,6 @@ namespace WpfApp_TitanStar_TestPlatform
                         SysLog.Add(LogLevel.Error, "電表數值異常");
                 }
             });
-            Instructions.Add(new(33, "斷開5V", Order.Custom)
-            {
-                OnStart = (Ins) =>
-                {
-                    SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
-                    Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
-                    Ins.ExcResult = ExcResult.Success;
-                    DispMain?.Invoke(() => G51_Supply = "3V");
-                }
-            });
-            
-
-            Instructions.Add(new(36, $"磁簧感應汽缸下降 {cyl_reed} -> 1", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)1])
-            {
-                OnStart = (Ins) => {
-                    Task.Run(() => {
-                        ins_pho_check.Execute();
-                    });
-                    NextStep();//->"磁簧汽缸 - LED檢測"
-                    SysLog.Add(LogLevel.Info, $"磁簧感應汽缸下降 {cyl_reed} -> 1");
-                },
-            });
-            Instructions.Add(new(37, "確認磁簧感應汽缸下降", Order.WaitPLCSiganl, [Global.PLC, sen_reed, (short)1, 5000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸下降 {sen_reed} -> 1"),
-                OnEnd = (Ins) =>
-                {
-                    while (ins_pho_check.ExcResult != ExcResult.Success)
-                    {
-                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
-                        {
-                            Ins.ExcResult = ExcResult.Error;
-                            break;
-                        }
-                        Thread.Sleep(200);
-                    }
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "磁簧感應光敏檢知異常");
-                    else
-                        SysLog.Add(LogLevel.Info, "磁簧感應光敏檢知確認");
-                }
-            });
-
-            Instructions.Add(new(39, $"磁簧感應汽缸上升 {cyl_reed} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)0])
-            {
-                OnStart = (Ins) => {
-                    Task.Run(() => {
-                        ins_pho_check.Execute();
-                    });
-                    SysLog.Add(LogLevel.Info, $"磁簧感應汽缸上升 {cyl_reed} -> 0");
-                },
-            });
-
-            Instructions.Add(new(40, $"等待磁簧感應汽缸上升 {sen_reed} -> 0", Order.WaitPLCSiganl, [Global.PLC, sen_reed, (short)0, 5000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸上升 {sen_reed} -> 0"),
-                OnEnd = (Ins) =>
-                {
-
-                    while (ins_pho_check.ExcResult != ExcResult.Success)
-                    {
-                        if (ins_pho_check.ExcResult == ExcResult.TimeOut)
-                        {
-                            Ins.ExcResult = ExcResult.Error;
-                            break;
-                        }
-                        Thread.Sleep(200);
-                    }
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "磁簧上升光敏檢知異常");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, "磁簧上升光敏檢知確認");
-                        DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V");
-                    }
-                }
-            });
-
             Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
             {
                 OnStart = async (Ins) => {
@@ -464,12 +411,53 @@ namespace WpfApp_TitanStar_TestPlatform
                     Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
                 },
             };
+            Instructions.Add(new(33, "斷開5V", Order.Custom)
+            {
+                OnStart = (Ins) =>
+                {
+                    SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
+                    Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
+                    Ins.ExcResult = ExcResult.Success;
+                    Task.Run(() => ins_initRF.Execute());
+                    DispMain?.Invoke(() => G51_Supply = "3V");
+                    Thread.Sleep(500);
+                }
+            });
+            
+            Instructions.Add(new(36, $"磁簧感應汽缸下降 {cyl_reed} -> 1", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)1])
+            {
+                OnStart = (Ins) => {
+                    NextStep();//->"磁簧汽缸 - LED檢測"
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"磁簧感應汽缸下降 {cyl_reed} -> 1");
+                },
+            });
+            Instructions.Add(new(37, "確認磁簧感應汽缸下降", Order.WaitPLCSiganl, [Global.PLC, sen_reed, (short)1, 5000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸下降 {sen_reed} -> 1"),
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("磁簧感應下降", Ins, ins_pho_check1, null,
+                                                             () => CurrentProduct!.ReedCheck = "X")
+            });
+
+            Instructions.Add(new(39, $"磁簧感應汽缸上升 {cyl_reed} -> 0", Order.SendPLCSignal, [Global.PLC, cyl_reed, (short)0])
+            {
+                OnStart = (Ins) => {
+                    CreatePhoTask(ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"磁簧感應汽缸上升 {cyl_reed} -> 0");
+                },
+            });
+
+            Instructions.Add(new(40, $"等待磁簧感應汽缸上升 {sen_reed} -> 0", Order.WaitPLCSiganl, [Global.PLC, sen_reed, (short)0, 5000])
+            {
+                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待磁簧感應汽缸上升 {sen_reed} -> 0"),
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck("磁簧感應上升", Ins, ins_pho_check1,
+                                                             () => CurrentProduct!.ReedCheck = "V",
+                                                             () => CurrentProduct!.ReedCheck = "X")
+            });
+
             Instructions.Add(new(42, $"3V+導通(探針) {v3_prb}-> 1", Order.SendPLCSignal, [Global.PLC, v3_prb, (short)1])
             {
                 OnStart = (Ins) => {
-                    Task.Run(() => {
-                        ins_initRF.Execute();
-                    });
                     SysLog.Add(LogLevel.Info, $"3V+導通(探針) {v3_prb}-> 1");
                 },
                 OnEnd = (Ins) => Thread.Sleep(200)
@@ -511,7 +499,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         }
                         Thread.Sleep(100);
                     }
-                    Thread.Sleep(2000);
+                    Thread.Sleep(1000);
                     if (Global.PLC.ReadOneData(photoresistor).ReturnValue == 1)
                     {
                         DispMain?.Invoke(() => CurrentProduct!.LowVCheck = "V");
@@ -534,8 +522,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 {
                     NextStep(); //->"測試開關 - LED檢測"
                     SysLog.Add(LogLevel.Info, $"測試開關汽缸上升 {cyl_switchTest} -> 1");
-                },
-                OnEnd = (Ins) => Thread.Sleep(200)
+                }
             });
 
             Instructions.Add(new(48, "等待亮燈", Order.WaitPLCSiganl, [Global.PLC, photoresistor, (short)1, 2000])
@@ -608,7 +595,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 }
             });
 
-            Instructions.Add(new(10, "讀電表值(低量程)", Order.WaitModbusFloat, [(ushort)0x0032, (float)1.0f, (float)8.0f, 8000])
+            Instructions.Add(new(10, "讀電表值(低量程)", Order.WaitModbusFloat, [(ushort)0x0032, (float)1.0f, (float)8.0f, 15000])
             {
                 OnStart = (Ins) => {
                     SysLog.Add(LogLevel.Info, "等待低量程電表(0x0032)數值(1uA~8uA)");
@@ -730,6 +717,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         if (PState.IsReseting || PState.IsStop)
                         {
                             PState.SetEnd(ExcResult.Abort);
+                            ErrorStep();
                             return;
                         }
                         int id = ins.ID ?? -1;
@@ -740,6 +728,7 @@ namespace WpfApp_TitanStar_TestPlatform
                             ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            ErrorStep();
                             G51TestNGRelease();
                             return;
                         }
@@ -747,6 +736,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     if (!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        ErrorStep();
                         G51TestNGRelease();
                         return;
                     }
@@ -831,6 +821,38 @@ namespace WpfApp_TitanStar_TestPlatform
             if (CurrentProduct != null)
                 DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
             CurrentProduct = null;
+        }
+
+        private static void CreatePhoTask(Instruction ins_pho_check, int delay_ms=200)
+        {
+            Task.Run(() => ins_pho_check.Execute());
+            Thread.Sleep(delay_ms);
+        }
+        private static ExcResult WaitPhoCheck(string Title,Instruction parent_ins,Instruction ins_pho_check,
+            Action? OnSuccessDispInvoke = null, Action? OnErrorDispInvoke = null)
+        {
+            while (ins_pho_check.ExcResult != ExcResult.Success)
+            {
+                if (ins_pho_check.ExcResult == ExcResult.TimeOut)
+                {
+                    ins_pho_check.ExcResult = ExcResult.Error;
+                    break;
+                }
+                Thread.Sleep(200);
+            }
+            if (ins_pho_check.ExcResult != ExcResult.Success)
+            {
+                SysLog.Add(LogLevel.Error, $"{Title}光敏檢知異常");
+                if (OnSuccessDispInvoke != null)
+                    DispMain?.Invoke(OnErrorDispInvoke);
+            }
+            else
+            {
+                SysLog.Add(LogLevel.Info, $"{Title}光敏檢知確認");
+                if(OnSuccessDispInvoke != null)
+                    DispMain?.Invoke(OnSuccessDispInvoke);
+            }
+            return ins_pho_check.ExcResult;
         }
         #endregion
         #region G51 Burn Sequence
@@ -1044,6 +1066,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         if (PState.IsReseting || PState.IsStop)
                         {
                             PState.SetEnd(ExcResult.Abort);
+                            ErrorStep();
                             SysLog.Add(LogLevel.Warning, $"{PState.Title}:已終止，請指定復歸方式後排出");
                             return;
                         }
@@ -1055,6 +1078,7 @@ namespace WpfApp_TitanStar_TestPlatform
                             ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            ErrorStep();
                             G51BurnNGRelease();
                             return;
                         }
@@ -1062,6 +1086,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     if(!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        ErrorStep();
                         G51BurnNGRelease();
                         return;
                     }
@@ -1070,6 +1095,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 PState.SetEnd(ExcResult.Success);
             });
         }
+
         private void G51BurnNGRelease()
         {
             const short ng_value = 2;

@@ -1,4 +1,5 @@
-﻿using Support;
+﻿using DeviceDB;
+using Support;
 using Support.Files;
 using Support.Logger;
 using System.Text;
@@ -23,12 +24,19 @@ namespace WpfApp_TitanStar_TestPlatform
             Model_Main.DispMain = Dispatcher;
             InitializeComponent();
         }
-
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             SysLog.Add(LogLevel.Info, "程式啟動");
             Global.MMain = DataContext as Model_Main;
-            Global.Initialize();
+            Global.Initialize(() =>
+            {
+                Dispatcher.Invoke(() => {
+                    Global.Configs.TryGetValue("WindowsTitle", out Config? title);
+                    if(!string.IsNullOrEmpty(title?.Value))
+                        Title = title.Value;
+                });
+            });
+
         }
     }
 }

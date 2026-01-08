@@ -432,6 +432,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         if (PState.IsReseting || PState.IsStop)
                         {
                             PState.SetEnd(ExcResult.Abort);
+                            ErrorStep();
                             return;
                         }
                         int id = ins.ID ?? -1;
@@ -442,6 +443,7 @@ namespace WpfApp_TitanStar_TestPlatform
                             ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            ErrorStep();
                             ZBRTTestNGRelease();
                             return;
                         }
@@ -449,6 +451,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     if (!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        ErrorStep();
                         ZBRTTestNGRelease();
                         return;
                     }
@@ -714,6 +717,7 @@ namespace WpfApp_TitanStar_TestPlatform
                             ins.ExcResult != ExcResult.Success)
                         {
                             PState.SetEnd(ins.ExcResult);
+                            ErrorStep();
                             ZBRTBurnNGRelease();
                             return;
                         }
@@ -722,6 +726,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     if (!ex)
                     {
                         PState.SetEnd(ExcResult.Error);
+                        ErrorStep();
                         ZBRTBurnNGRelease();
                         return;
                     }

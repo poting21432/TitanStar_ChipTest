@@ -22,13 +22,16 @@
     <Folder Include="Models\" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="configs.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="configs_3.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="configs_2.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="configs.db">
+    <None Update="configs_1.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="data.db">
