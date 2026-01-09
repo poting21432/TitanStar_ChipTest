@@ -16,11 +16,11 @@ namespace WpfApp_TitanStar_TestPlatform
 {
     public partial class Model_Main
     {
-        static Lazy<string> ZBRT_v5_pos = new(()=> "ZBRT_Supply_5V+".GetPLCMem());//M3051
-        static Lazy<string> ZBRT_v5_neg = new(()=> "ZBRT_Supply_5V-".GetPLCMem());//M3052
-        static Lazy<string> ZBRT_v3_pos = new(()=> "ZBRT_Supply_3V+".GetPLCMem());//M3055
-        static Lazy<string> ZBRT_v3_neg = new(()=> "ZBRT_Supply_3V-".GetPLCMem());//M3056
-        static Lazy<string> ZBRT_v_low = new (()=>"ZBRT_Supply_2.4V".GetPLCMem());//M3058
+        static readonly Lazy<string> ZBRT_v5_pos = new(()=> "ZBRT_Supply_5V+".GetPLCMem());//M3051
+        static readonly Lazy<string> ZBRT_v5_neg = new(()=> "ZBRT_Supply_5V-".GetPLCMem());//M3052
+        static readonly Lazy<string> ZBRT_v3_pos = new(()=> "ZBRT_Supply_3V+".GetPLCMem());//M3055
+        static readonly Lazy<string> ZBRT_v3_neg = new(()=> "ZBRT_Supply_3V-".GetPLCMem());//M3056
+        static readonly Lazy<string> ZBRT_v_low = new (()=>"ZBRT_Supply_2.4V".GetPLCMem());//M3058
         public ProcedureState ZBRTBurnState { get; set; } = new("ZBRT燒錄程序");
         public ProcedureState ZBRTTestState { get; set; } = new("ZBRT測試程序");
 
@@ -40,9 +40,9 @@ namespace WpfApp_TitanStar_TestPlatform
             Command_ZBRT_3VON = new RelayCommand<object>((obj) =>
             {
                 if (!Global.IsInitialized) return;
-                Global.PLC.WriteRandomData([ZBRT_v5_pos.Value, ZBRT_v5_pos.Value, ZBRT_v_low.Value], [0, 0, 0]);
-                Thread.Sleep(300);
                 Global.PLC.WriteRandomData([ZBRT_v3_pos.Value, ZBRT_v3_neg.Value], [1, 1]);
+                Thread.Sleep(300);
+                Global.PLC.WriteRandomData([ZBRT_v5_pos.Value, ZBRT_v5_neg.Value, ZBRT_v_low.Value], [0, 0, 0]);
                 ZBRT_Supply = "3V";
                 SysLog.Add(LogLevel.Warning, $"手動切換電壓(ZBRT):{ZBRT_Supply}");
             });
@@ -171,7 +171,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     NextStep(); //"3V導通-LED檢測"
                     SysLog.Add(LogLevel.Info, $"登錄開關汽缸下降 {mem_switch} -> 1");
                 },
-                OnEnd = (Ins) => Thread.Sleep(2000)
+                OnEnd = (Ins) => Thread.Sleep(1000)
             });
             Instructions.Add(new(33, "導通5V", Order.Custom)
             {
@@ -180,10 +180,10 @@ namespace WpfApp_TitanStar_TestPlatform
                     NextStep(); //->"5V,mA 電表測試"
                     SysLog.Add(LogLevel.Info, $"導通5V {v5_pos}->1 {v5_neg}->1");
                     Global.PLC.WriteRandomData([v5_pos, v5_neg], [1, 1]);
+                    DispMain?.Invoke(() => ZBRT_Supply = "5V");
                 },
                 OnEnd = (Ins) => {
                     Thread.Sleep(500);
-                    Ins.ExcResult = ExcResult.Success;
                 }
             });
             Instructions.Add(new(14, "導通3V", Order.Custom)
@@ -193,10 +193,11 @@ namespace WpfApp_TitanStar_TestPlatform
                     CreateInstructionTask("頻譜儀初始化", ins_initRF);
                     CreateInstructionTask("3V測試導通", ins_pho_check4);
                     SysLog.Add(LogLevel.Info, $"導通3V {v3_pos}->1 {v3_neg}->1");
-                    Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
+                    var r = Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
+                    Ins.ExcResult = r.IsSuccess ? ExcResult.Success : ExcResult.Error;
+                    DispMain?.Invoke(() => ZBRT_Supply = "3V");
                 },
                 OnEnd = (Ins) => {
-                    Thread.Sleep(100);
                     Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check4,
                          () => CurrentProduct!.OnCheck = "V",
                          () => CurrentProduct!.OnCheck = "X");
@@ -205,6 +206,7 @@ namespace WpfApp_TitanStar_TestPlatform
             Instructions.Add(new(16, "登錄開關上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
             {
                 OnStart = (Ins) => {
+                    Thread.Sleep(500);
                     CreateInstructionTask("登錄開關上升", ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"登錄開關上升 {mem_switch} -> 0");
                 },
@@ -240,8 +242,9 @@ namespace WpfApp_TitanStar_TestPlatform
                 {
                     CreateInstructionTask("斷開5V", ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
-                    Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
-                    Ins.ExcResult = ExcResult.Success;
+                    var r = Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
+                    Ins.ExcResult = r.IsSuccess ? ExcResult.Success : ExcResult.Error;
+                    DispMain?.Invoke(() => ZBRT_Supply = "3V");
                 },
                 OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1)
             });
@@ -251,8 +254,9 @@ namespace WpfApp_TitanStar_TestPlatform
                 OnStart = (Ins) =>
                 {
                     NextStep();
-                    SysLog.Add(LogLevel.Info, $"2.4V導通 {v_low} -> 1");
-                }
+                    SysLog.Add(LogLevel.Info, $"2.4V導通 {v_low} -> 1"); 
+                },
+                OnEnd = (Ins) => DispMain?.Invoke(() => ZBRT_Supply = "2.4V")
             });
 
             Instructions.Add(new(44, "長亮檢查", Order.Custom)
@@ -270,7 +274,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         }
                         Thread.Sleep(100);
                     }
-                    Thread.Sleep(2000);
+                    Thread.Sleep(1000);
                     if (Global.PLC.ReadOneData(photoresistor).ReturnValue == 1)
                     {
                         Ins.ExcResult = ExcResult.Success;
@@ -282,6 +286,7 @@ namespace WpfApp_TitanStar_TestPlatform
             Instructions.Add(new(46, "2.4V斷開", Order.SendPLCSignal, [Global.PLC, v_low, (short)0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"2.4V斷開 {v_low} -> 0"),
+                OnEnd = (Ins) => DispMain?.Invoke(() => ZBRT_Supply = "3V")
             });
             Instructions.Add(new(47, "測試開關汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)1])
             {
@@ -326,28 +331,28 @@ namespace WpfApp_TitanStar_TestPlatform
                 {
                     NextStep();
                     SysLog.Add(LogLevel.Success, $"產品作業完成 {mem_result} -> 1");
-                    Thread.Sleep(3000);
+                    Thread.Sleep(1000);
                 },
             });
-            Instructions.Add(new(14, "斷開3V+", Order.SendPLCSignal, [Global.PLC, v3_pos, (short)0])
-            {
-                OnStart = (Ins) => {
-                    SysLog.Add(LogLevel.Info, $"斷開3V+ {v3_pos}->0");
-                }
-            });
-            Instructions.Add(new(14, "斷開3V-", Order.SendPLCSignal, [Global.PLC, v3_neg, (short)0])
+            Instructions.Add(new(33, "斷開3V", Order.Custom)
             {
                 OnStart = (Ins) =>
                 {
-                    NextStep();//->"3V導通 LED閃爍檢測"
-                    SysLog.Add(LogLevel.Info, $"斷開3V- {v3_neg}->0");
-                },
-                OnEnd = (Ins) => Thread.Sleep(1000)
+                    SysLog.Add(LogLevel.Info, $"斷開3V {v3_pos}->0 {v3_neg}->0");
+                    var r = Global.PLC.WriteRandomData([v3_pos, v3_neg], [0, 0]);
+                    DispMain?.Invoke(() => G51_Supply = "OFF");
+                    Thread.Sleep(500);
+                    Ins.ExcResult = r.IsSuccess ? ExcResult.Success : ExcResult.Error;
+                }
             });
 
             Instructions.Add(new(51, "升降汽缸下降程序", Order.WaitPLCSiganl, [Global.PLC, sen_cyUD_UP, (short)1, 2000])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"檢查升降汽缸:上定位 {sen_cyUD_UP} == 1"),
+                OnStart = (Ins) =>
+                {
+                    NextStep();
+                    SysLog.Add(LogLevel.Info, $"檢查升降汽缸:上定位 {sen_cyUD_UP} == 1");
+                },
                 OnEnd = (Ins) => {
                     if (Ins.ExcResult == ExcResult.Success)
                     {
@@ -390,13 +395,12 @@ namespace WpfApp_TitanStar_TestPlatform
             #endregion
             Task.Run(() =>
             {
-                if (CurrentStepID != 4)
+                if (CurrentStepID != 4 || CurrentProduct == null)
                 {
-                    if (CurrentProduct == null)
-                        DispMain?.Invoke(() => {
-                            CurrentProduct = new() { TimeStart = DateTime.Now };
-                            ProductRecords.Add(CurrentProduct);
-                        });
+                    DispMain?.Invoke(() => {
+                        CurrentProduct = new() { TimeStart = DateTime.Now };
+                        ProductRecords.Add(CurrentProduct);
+                    });
                     ResetSteps(4, setStart: true);
                 }
                 DispMain?.Invoke(() =>

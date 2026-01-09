@@ -136,6 +136,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 while (!IsInitialized)
                     Thread.Sleep(1000);
                 string mem_pType = "ProductType".GetPLCMem();
+                Thread.Sleep(1000);
                 while (true)
                 {
                     Thread.Sleep(1000);
@@ -165,6 +166,7 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 while (!IsInitialized)
                     Thread.Sleep(500);
+                Thread.Sleep(1000);
                 string memReady_G51 = "G51_Signal_Ready".GetPLCMem();
                 string memReady_ZBRT = "ZBRT_Signal_Ready".GetPLCMem();
                 string memReady_BG51 = "G51_Burn_Ready".GetPLCMem();
@@ -199,6 +201,7 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 while (!IsInitialized || MMain == null)
                     Thread.Sleep(500);
+                Thread.Sleep(1000);
                 Model_Main.DispMain?.Invoke(() =>
                 {
                     MMain.PLCAddrData.Clear();
@@ -216,7 +219,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 string[] PLCAddrList = [];
                 while (!IsInitialized || MMain == null || MMain.PLCAddrData.Count != PLCAddrs.Values.Count)
                     Thread.Sleep(500);
-
+                Thread.Sleep(1000);
                 PLCAddrList = [.. MMain.PLCAddrData.Select(x => x.Address ?? "")];
                 "PLC同步".TryCatch(() =>
                 {

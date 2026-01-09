@@ -657,13 +657,12 @@ namespace WpfApp_TitanStar_TestPlatform
             #endregion
             Task.Run(() =>
             {
-                if(CurrentStepID != 4)
+                if(CurrentStepID != 4 || CurrentProduct == null)
                 {
-                    if (CurrentProduct == null)
-                        DispMain?.Invoke(() => {
-                            CurrentProduct = new() { TimeStart = DateTime.Now };
-                            ProductRecords.Add(CurrentProduct);
-                        });
+                    DispMain?.Invoke(() => {
+                        CurrentProduct = new() { TimeStart = DateTime.Now };
+                        ProductRecords.Add(CurrentProduct);
+                    });
                     ResetSteps(4, setStart: true);
                 }
                 PState.SignalNext = false;
