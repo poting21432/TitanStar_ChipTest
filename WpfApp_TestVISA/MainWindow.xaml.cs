@@ -34,6 +34,8 @@ namespace WpfApp_TitanStar_TestPlatform
                     Global.Configs.TryGetValue("WindowsTitle", out Config? title);
                     if(!string.IsNullOrEmpty(title?.Value))
                         Title = title.Value;
+                    if(Global.MMain != null)
+                        Global.MMain.SelectedProductType = "G51";
                 });
             });
 

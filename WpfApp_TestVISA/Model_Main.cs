@@ -131,6 +131,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         MessageBoxButton.YesNo, MessageBoxImage.Warning);
                     if (dr == MessageBoxResult.Yes)
                     {
+                        SelectedResetOption = "NG排出";
                         Task.Run(() => Command_BurnReset?.Execute(null));
                         Task.Run(() => Command_TestReset?.Execute(null));
                     }
@@ -151,9 +152,11 @@ namespace WpfApp_TitanStar_TestPlatform
                 isManualMode = value;
             }
         }
-        
-       
-        public Model_Main()
+        public ObservableCollection<string> ResetOptions { get; set; } = ["無排出", "NG排出", "OK排出"];
+        public string SelectedResetOption { get; set; } = "NG排出";
+        public short PLCResetResult => (SelectedResetOption) switch {
+             "無排出" => 0, "OK排出" => 1, "NG排出" => 2,_ => 2,};
+    public Model_Main()
         {
             IsManualMode = true;
             DevStateMap = DeviceStates.ToDictionary(x => x.Title);
@@ -204,7 +207,16 @@ namespace WpfApp_TitanStar_TestPlatform
             }); 
             Command_TestStop = new RelayCommand<object>((obj) =>
             {
-                G51TestState.IsStop = true;
+                if (CurrentTestState == null) return;
+                SysLog.Add(LogLevel.Warning, $"手動停止:{CurrentTestState.Title}");
+                CurrentTestState.IsStop = true;
+                CurrentTestState.CurrentInstruction?.Abort();
+                Task.Run(() =>
+                {
+                    Thread.Sleep(1000);
+                    if (CurrentTestState == null) return;
+                    CurrentTestState.IsStop = false;
+                });
             });
             Command_TestReset = new RelayCommand<object>((obj) =>
             {
@@ -218,7 +230,16 @@ namespace WpfApp_TitanStar_TestPlatform
             });
             Command_BurnStop = new RelayCommand<object>((obj) =>
             {
-                G51BurnState.IsStop = true;
+                if (CurrentBurnState == null) return;
+                SysLog.Add(LogLevel.Warning, $"手動停止:{CurrentBurnState.Title}");
+                CurrentBurnState.IsStop = true;
+                CurrentBurnState.CurrentInstruction?.Abort(); 
+                Task.Run(() =>
+                {
+                    Thread.Sleep(1000);
+                    if (CurrentBurnState == null) return;
+                    CurrentBurnState.IsStop = false;
+                });
             });
             Command_BurnReset = new RelayCommand<object>((obj) =>
             {
@@ -232,11 +253,13 @@ namespace WpfApp_TitanStar_TestPlatform
             });
             Command_NextStepBurn = new RelayCommand<object>((obj) =>
             {
-                G51BurnState.SignalNext = true;
+                if (CurrentBurnState == null) return;
+                CurrentBurnState.SignalNext = true;
             });
             Command_NextStepTest = new RelayCommand<object>((obj) =>
             {
-                G51TestState.SignalNext = true;
+                if (CurrentTestState == null) return;
+                CurrentTestState.SignalNext = true;
             });
             DevStateMap.TryGetValue("電表", out DeviceDisplay? PMDisplay);
             Command_SetPowerMeter_Low = new RelayCommand<object>((obj) =>
@@ -445,24 +468,6 @@ namespace WpfApp_TitanStar_TestPlatform
             }
             
         }
-        private void AddSigCount(int ID,string Memory, short Count, Action? ExtAction = null, int timeOut = 5000)
-        {
-            Instructions.Add(new(ID, $"閃爍檢測{Count}次", Order.PLCSignalCount, [Global.PLC,Memory, (short)Count, timeOut])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"開始閃爍檢測 {Count}次: M4003 ^v {Count}"),
-                OnEnd = (Ins) =>
-                {
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                    else
-                    {
-                        SysLog.Add(LogLevel.Info, $"確認閃爍{Count}次");
-                        ExtAction?.Invoke();
-                        Thread.Sleep(800);
-                    }
-                }
-            });
-        }
         public void ErrorStep()
         {
             DispMain?.Invoke(() =>
@@ -517,6 +522,81 @@ namespace WpfApp_TitanStar_TestPlatform
                 ResetSteps();
             });
         }
+
+        private Instruction ins_pho_check4 = new(-1, "", Order.Custom, []);
+        private Instruction ins_pho_check1 = new(-1,"", Order.Custom, []);
+        private Instruction ins_initRF = new(-1, "", Order.Custom, []);
+        internal void InitTaskedInstructions(string photoresistor)
+        {
+            ins_initRF = new(102, $"頻譜儀初始化", Order.Custom)
+            {
+                OnStart = async (Ins) => {
+                    bool isP = await PrepareRF();
+                    Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
+                },
+            };
+            ins_pho_check1 = new(101, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
+            {
+                OnStart = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
+                    SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1");
+                },
+                OnEnd = (Ins) =>
+                {
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else Thread.Sleep(300);
+                }
+            }; 
+            ins_pho_check4 = new(102, $"閃爍檢測4次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)4, 15000])
+            {
+                OnStart = (Ins) =>
+                {
+                    Ins.ExcResult = ExcResult.NotSupport; // 強制重設
+                    SysLog.Add(LogLevel.Info, $"閃爍檢測 4次: {photoresistor} ^v 1");
+                },
+                OnEnd = (Ins) =>
+                {
+                    if (Ins.ExcResult != ExcResult.Success)
+                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
+                    else Thread.Sleep(300);
+                }
+            };
+        }
+        internal static void CreateInstructionTask(string Title, Instruction instruction, int delay_ms = 100)
+        {
+            instruction.Reset();
+            Task.Run(() => instruction.Execute());
+            Thread.Sleep(delay_ms);
+        }
+        internal static ExcResult WaitPhoCheck(Instruction parent_ins, Instruction ins_pho_check,
+            Action? OnSuccessDispInvoke = null, Action? OnErrorDispInvoke = null)
+        {
+            while (ins_pho_check.ExcResult != ExcResult.Success)
+            {
+                if (ins_pho_check.ExcResult == ExcResult.TimeOut)
+                {
+                    ins_pho_check.ExcResult = ExcResult.Error;
+                    break;
+                }
+                Thread.Sleep(200);
+            }
+            if (ins_pho_check.ExcResult != ExcResult.Success)
+            {
+                SysLog.Add(LogLevel.Error, $"{ins_pho_check.Title}:光敏檢知異常");
+                if (OnSuccessDispInvoke != null)
+                    DispMain?.Invoke(OnErrorDispInvoke);
+            }
+            else
+            {
+                SysLog.Add(LogLevel.Info, $"{ins_pho_check.Title}:光敏檢知確認");
+                if (OnSuccessDispInvoke != null)
+                    DispMain?.Invoke(OnSuccessDispInvoke);
+            }
+            return ins_pho_check.ExcResult;
+        }
+
     }
     public enum ExcResult
     {

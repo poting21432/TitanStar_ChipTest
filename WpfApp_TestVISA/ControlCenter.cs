@@ -42,7 +42,7 @@ namespace WpfApp_TitanStar_TestPlatform
         public static SerialPort? ModbusPort{ get; set; }
 
         public static bool IsInitialized = false;
-        
+
         internal static TCPCommand? TcpCommand { get; set; }
         public static Model_Main? MMain { get; set; } = null;
 
@@ -144,7 +144,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         short productType = PLC.ReadOneData(mem_pType).ReturnValue;
                         Model_Main.DispMain?.Invoke(() =>
                         {
-                            if (MMain == null)
+                            if (MMain == null || MMain.IsManualMode)
                                 return;
                             if (productType == 1 && MMain!.SelectedProductType !="G51")
                             {

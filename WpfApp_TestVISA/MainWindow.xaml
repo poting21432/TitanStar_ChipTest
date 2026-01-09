@@ -54,34 +54,42 @@
                 <DataGrid Margin="0 20" AutoGenerateColumns="False" Width="920" FontSize="20" Style="{StaticResource StyleDataGrid_RowSelection}"
              IsReadOnly="True" ItemsSource="{Binding ProductRecords}" Height="440" CanUserSortColumns="True" CanUserAddRows="False">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="ID" FontSize="20" Binding="{Binding ID}" Width="50"/>
-                        <DataGridTextColumn Header="開始時間" FontSize="20" Binding="{Binding TimeStart}" Width="140"/>
-                        <DataGridTextColumn Header="結束時間" FontSize="20" Binding="{Binding TimeEnd}" Width="140"/>
-                        <DataGridTextColumn Header="燒錄" FontSize="20" Binding="{Binding BurnCheck}"  Width="40"/>
-                        <DataGridTextColumn Header="3V-uA" FontSize="20" Binding="{Binding Test3VuA, StringFormat=F3}"  Width="70"/>
-                        <DataGridTextColumn Header="導通" FontSize="20" Binding="{Binding OnCheck}"  Width="45"/>
-                        <DataGridTextColumn Header="DIO" FontSize="20" Binding="{Binding DIOCheck}"  Width="45"/>
-                        <DataGridTextColumn Header="指撥1" FontSize="20" Binding="{Binding Switch1Check}"  Width="45"/>
-                        <DataGridTextColumn Header="指撥2" FontSize="20" Binding="{Binding Switch2Check}"  Width="45"/>
-                        <DataGridTextColumn Header="蓋開" FontSize="20" Binding="{Binding CoverCheck}"  Width="45"/>
-                        <DataGridTextColumn Header="5V-mA" FontSize="20" Binding="{Binding Test5VmA, StringFormat=F3}"  Width="70"/>
-                        <DataGridTextColumn Header="磁簧" FontSize="20" Binding="{Binding ReedCheck}"  Width="45"/>
-                        <DataGridTextColumn Header="2.4V" FontSize="20" Binding="{Binding LowVCheck}"  Width="55"/>
-                        <DataGridTextColumn Header="開關" FontSize="20" Binding="{Binding OnOffCheck}"  Width="55"/>
+                        <DataGridTextColumn Header="ID" FontSize="20" Binding="{Binding ID}" Width="35"/>
+                        <DataGridTextColumn Header="開始時間" FontSize="20" Binding="{Binding TimeStart, StringFormat='MM/dd HH:mm:ss'}" Width="130"/>
+                        <DataGridTextColumn Header="結束時間" FontSize="20" Binding="{Binding TimeEnd, StringFormat='MM/dd HH:mm:ss'}" Width="130"/>
+                        <DataGridTextColumn Header="3V-uA" FontSize="20" Binding="{Binding Test3VuA, StringFormat=F3}"  Width="60"/>
+                        <DataGridTextColumn Header="5V-mA" FontSize="20" Binding="{Binding Test5VmA, StringFormat=F3}"  Width="60"/>
                         <DataGridTextColumn Header="頻譜儀" FontSize="20" Binding="{Binding TestAntenna, StringFormat=F3}"  Width="70"/>
+                        <DataGridTextColumn Header="燒錄" FontSize="20" Binding="{Binding BurnCheck}"  ElementStyle="{StaticResource DG_ResultColorText}" Width="40"/>
+                        <DataGridTextColumn Header="導通" FontSize="20" Binding="{Binding OnCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="DIO" FontSize="20" Binding="{Binding DIOCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="指撥1" FontSize="20" Binding="{Binding Switch1Check}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="指撥2" FontSize="20" Binding="{Binding Switch2Check}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="蓋開" FontSize="20" Binding="{Binding CoverCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="磁簧" FontSize="20" Binding="{Binding ReedCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="45"/>
+                        <DataGridTextColumn Header="低電壓" FontSize="20" Binding="{Binding LowVCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="55"/>
+                        <DataGridTextColumn Header="開關" FontSize="20" Binding="{Binding OnOffCheck}" ElementStyle="{StaticResource DG_ResultColorText}" Width="55"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </StackPanel>
             <StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0 10">
-                    <TextBlock Text="產品別" Margin="15 0"/>
-                    <ComboBox ItemsSource="{Binding ProductTypes}" SelectedValue="{Binding SelectedProductType}" Width="200" Margin="20 0"/>
-                    <TextBlock Text="手動" Margin="15 0"/>
-                    <CheckBox IsChecked="{Binding IsManualMode}" Margin="0 10">
-                        <CheckBox.LayoutTransform>
+                <StackPanel Orientation="Horizontal" Margin="5 10 0 0" Height="35">
+                    <TextBlock Text="手動" Margin="5 0"/>
+                    <RadioButton IsChecked="{Binding IsManualMode}" VerticalAlignment="Center">
+                        <RadioButton.LayoutTransform>
                             <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
-                        </CheckBox.LayoutTransform>
-                    </CheckBox>
+                        </RadioButton.LayoutTransform>
+                    </RadioButton>
+                    <TextBlock Text="自動" Margin="5 0"/>
+                    <RadioButton VerticalAlignment="Center">
+                        <RadioButton.LayoutTransform>
+                            <ScaleTransform ScaleX="1.2" ScaleY="1.2"/>
+                        </RadioButton.LayoutTransform>
+                    </RadioButton>
+                    <TextBlock Text="產品別" Margin="5 0"/>
+                    <ComboBox ItemsSource="{Binding ProductTypes}" IsEnabled="{Binding IsManualMode}" SelectedValue="{Binding SelectedProductType}" Width="80" Margin="5 0" FontSize="20"/>
+                    <TextBlock Text="異常" Margin="5 0"/>
+                    <ComboBox ItemsSource="{Binding ResetOptions}" Width="100" SelectedValue="{Binding SelectedResetOption}" FontSize="20" IsEnabled="{Binding IsManualMode}"/>
                 </StackPanel>
                 <StackPanel IsEnabled="{Binding IsManualMode}">
                     <StackPanel Orientation="Horizontal" Margin="10 5">

@@ -8,6 +8,16 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary x:Name="Resource_BlueEx" Source="/WpfApp.Themes.BlueEX;component/BlueEx/BlueEX.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="DG_ResultColorText" TargetType="TextBlock">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding}" Value="V">
+                        <Setter Property="Foreground" Value="LightGreen"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding}" Value="X">
+                        <Setter Property="Foreground" Value="Red"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </prism:PrismApplication.Resources>
 </prism:PrismApplication>

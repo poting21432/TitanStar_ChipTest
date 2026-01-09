@@ -26,9 +26,9 @@ namespace WpfApp_TitanStar_TestPlatform
 
         internal static readonly string[] StrSteps_ZBRT = [
             "等待燒錄到位" ,"燒錄中", "燒錄完成復歸",
-            "等待測試到位","3V導通LED檢測", "蓋開LED檢測", "5V導通LED檢測",
-            "低電壓LED檢測", "測試開關 - LED檢測", "頻譜儀天線強度測試", 
-            "完成並記錄資訊"
+            "等待測試到位","3V導通-LED檢測", "蓋開-LED檢測",
+            "低電壓-LED檢測", "測試開關-LED檢測", "頻譜儀天線強度測試",
+            "產品完成送出"
         ];
         #region ZBRT Related Commands
         public ICommand? Command_ZBRT_3VON { get; set; }
@@ -80,6 +80,7 @@ namespace WpfApp_TitanStar_TestPlatform
         #region ZBRT Test Sequence
         public void ProcedureTest_ZBRT()
         {
+            CurrentTestState = ZBRTTestState;
             ProcedureState PState = ZBRTTestState;
             if (PState.IsBusy)
             {
@@ -102,7 +103,9 @@ namespace WpfApp_TitanStar_TestPlatform
             string v_low = "ZBRT_Supply_2.4V".GetPLCMem();//M3058
             string photoresistor = "ZBRT_Sensor_Photoresistor".GetPLCMem();//M4052
             string cyl_cover = "ZBRT_Cylinder_Cover".GetPLCMem();//M3053
+            string mem_result = "ZBRT_Signal_Result".GetPLCMem();//D3031
 
+            InitTaskedInstructions(photoresistor);
             Instructions.Add(new(1, "工件放置確認", Order.WaitPLCSiganl, [Global.PLC, memReady, (short)1, 0])
             {
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"等待工件放置完畢 {memReady} == 1")
@@ -160,13 +163,12 @@ namespace WpfApp_TitanStar_TestPlatform
                         Global.PLC.WriteOneData(cyl_UD_UP, 0);
                         SysLog.Add(LogLevel.Info, $"升降汽缸上升復歸 {cyl_UD_UP}-> 0");
                     }
-
                 }
             });
             Instructions.Add(new(3, "登錄開關汽缸下降", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)1])
             {
                 OnStart = (Ins) => {
-                    NextStep();
+                    NextStep(); //"3V導通-LED檢測"
                     SysLog.Add(LogLevel.Info, $"登錄開關汽缸下降 {mem_switch} -> 1");
                 },
                 OnEnd = (Ins) => Thread.Sleep(2000)
@@ -188,87 +190,67 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 OnStart = (Ins) =>
                 {
+                    CreateInstructionTask("頻譜儀初始化", ins_initRF);
+                    CreateInstructionTask("3V測試導通", ins_pho_check4);
                     SysLog.Add(LogLevel.Info, $"導通3V {v3_pos}->1 {v3_neg}->1");
                     Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
                 },
                 OnEnd = (Ins) => {
                     Thread.Sleep(100);
-                    Ins.ExcResult = ExcResult.Success;
+                    Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check4,
+                         () => CurrentProduct!.OnCheck = "V",
+                         () => CurrentProduct!.OnCheck = "X");
                 }
             });
-            AddSigCount(15, photoresistor, 4, null, 10000);//, () => DispMain?.Invoke(() => CurrentProduct!.OnCheck = "V"));
-            Instruction ins_check2 = new(41, $"閃爍檢測1次", Order.PLCSignalCount, [Global.PLC, photoresistor, (short)1, 5000])
-            {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"閃爍檢測 1次: {photoresistor} ^v 1"),
-                OnEnd = (Ins) =>
-                {
-                    if (Ins.ExcResult != ExcResult.Success)
-                        SysLog.Add(LogLevel.Error, "閃爍檢測計數錯誤");
-                    else
-                        SysLog.Add(LogLevel.Info, $"確認閃爍1次");
-                }
-            };
-            Instructions.Add(new(16, "登錄開關汽缸上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
+            Instructions.Add(new(16, "登錄開關上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
             {
                 OnStart = (Ins) => {
-                    Task.Run(() => {
-                        ins_check2.Execute();
-                    });
-                    SysLog.Add(LogLevel.Info, $"登錄開關汽缸上升 {mem_switch} -> 0");
+                    CreateInstructionTask("登錄開關上升", ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"登錄開關上升 {mem_switch} -> 0");
                 },
-                OnEnd =(Ins) =>
-                {
-                    while (ins_check2.ExcResult != ExcResult.Success)
-                    {
-                        if (ins_check2.ExcResult == ExcResult.TimeOut)
-                        {
-                            Ins.ExcResult = ExcResult.Error;
-                            return;
-                        }
-                        Thread.Sleep(200);
-                    }
-                }
+                OnEnd =(Ins) => Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1)
             });
-            Instructions.Add(new(29, "蓋開升降汽缸下降", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)1])
+            Instructions.Add(new(29, "蓋開汽缸下降", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)1])
             {
                 OnStart = (Ins) => {
+                    CreateInstructionTask("蓋開汽缸下降", ins_pho_check1);
                     NextStep();
-                    SysLog.Add(LogLevel.Info, $"蓋開升降汽缸下降 {cyl_cover} -> 1");
+                    SysLog.Add(LogLevel.Info, $"蓋開汽缸下降 {cyl_cover} -> 1");
                 },
+                OnEnd = (Ins) =>
+                    Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1,
+                        null, () => CurrentProduct!.CoverCheck = "X")
             });
-            AddSigCount(30, photoresistor, 1);
-            Instructions.Add(new(31, "蓋開升降汽缸上升", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)0])
+            Instructions.Add(new(31, "蓋汽缸上升", Order.SendPLCSignal, [Global.PLC, cyl_cover, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"蓋開升降汽缸上升 {cyl_cover} -> 0"),
-            });
-            AddSigCount(32, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.CoverCheck = "V"));
-            Instruction ins_initRF = new(43, $"頻譜儀初始化", Order.Custom)
-            {
-                OnStart = async (Ins) => {
-                    bool isP = await PrepareRF();
-                    Ins.ExcResult = isP ? ExcResult.Success : ExcResult.Error;
+                OnStart = (Ins) =>
+                {
+                    CreateInstructionTask("蓋開汽缸上升", ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"蓋開汽缸上升 {cyl_cover} -> 0");
                 },
-            };
+                OnEnd = (Ins) =>
+                    Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1,
+                        () => CurrentProduct!.CoverCheck = "V",
+                        () => CurrentProduct!.CoverCheck = "X")
+            });
+
             Instructions.Add(new(33, "斷開5V", Order.Custom)
             {
                 OnStart = (Ins) =>
                 {
-                    Task.Run(() => {
-                        ins_initRF.Execute();
-                    });
+                    CreateInstructionTask("斷開5V", ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
                     Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
                     Ins.ExcResult = ExcResult.Success;
-                }
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1)
             });
-            AddSigCount(34, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.ReedCheck = "V"));
-           
 
             Instructions.Add(new(44, "2.4V導通", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
             {
                 OnStart = (Ins) =>
                 {
-                    NextStep(); //->"2.4V LED閃爍檢測"
+                    NextStep();
                     SysLog.Add(LogLevel.Info, $"2.4V導通 {v_low} -> 1");
                 }
             });
@@ -314,15 +296,21 @@ namespace WpfApp_TitanStar_TestPlatform
                 OnStart = (Ins) => SysLog.Add(LogLevel.Info, "等待光敏檢知"),
                 OnEnd = (Ins) => {
                     SysLog.Add(LogLevel.Info, "確認光敏檢知");
-                    Ins.ExcResult = ExcResult.Success;
-                    Thread.Sleep(500);
+                    Thread.Sleep(200);
                 },
             });
-            Instructions.Add(new(49, "測試開關汽缸上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
+            Instructions.Add(new(49, "測試開關上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
             {
-                OnStart = (Ins) => SysLog.Add(LogLevel.Info, $"測試開關汽缸上升 {mem_switch} -> 0")
+                OnStart = (Ins) =>
+                {
+                    CreateInstructionTask("測試開關上升", ins_pho_check1);
+                    SysLog.Add(LogLevel.Info, $"測試開關上升 {mem_switch} -> 0");
+                },
+                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1,
+                                                             () => CurrentProduct!.OnOffCheck = "V",
+                                                             () => CurrentProduct!.OnOffCheck = "X")
             });
-            AddSigCount(48, photoresistor, 1);//, () => DispMain?.Invoke(() => CurrentProduct!.OnOffCheck = "V"));
+            
             Instructions.Add(new(50, "頻譜儀天線強度測試", Order.Custom)
             {
                 OnStart = async (Ins) =>
@@ -332,7 +320,6 @@ namespace WpfApp_TitanStar_TestPlatform
                     Ins.ExcResult = double.IsNaN(value) ? ExcResult.Error : ExcResult.Success;
                 },
             });
-            string mem_result = "ZBRT_Signal_Result".GetPLCMem();//D3031
             Instructions.Add(new(52, "測試結果", Order.SendPLCSignal, [Global.PLC, mem_result, (short)1])
             {
                 OnEnd = (Ins) =>
@@ -412,6 +399,12 @@ namespace WpfApp_TitanStar_TestPlatform
                         });
                     ResetSteps(4, setStart: true);
                 }
+                DispMain?.Invoke(() =>
+                {
+                    CurrentProduct!.DIOCheck = "-";
+                    CurrentProduct.Switch1Check = "-";
+                    CurrentProduct.Switch2Check = "-";
+                });
                 PState.SignalNext = false;
                 if (PState.IsModeStep)
                     SysLog.Add(LogLevel.Warning, "步進模式");
@@ -420,6 +413,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 {
                     if (PState.IsCompleted)
                         return;
+                    DispMain?.Invoke(() => PState.CurrentInstruction = ins);
                     bool ex = "測試流程".TryCatch(() =>
                     {
                         if (PState.IsModeStep)
@@ -431,7 +425,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         }
                         if (PState.IsReseting || PState.IsStop)
                         {
-                            PState.SetEnd(ExcResult.Abort);
+                            PState.SetEnd(ExcResult.Abort, () => ErrorStep());
                             ErrorStep();
                             return;
                         }
@@ -442,7 +436,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         if (!PState.IsBypassErr && ins != null &&
                             ins.ExcResult != ExcResult.Success)
                         {
-                            PState.SetEnd(ins.ExcResult);
+                            PState.SetEnd(ins.ExcResult, () => ErrorStep());
                             ErrorStep();
                             ZBRTTestNGRelease();
                             return;
@@ -450,7 +444,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     });
                     if (!ex)
                     {
-                        PState.SetEnd(ExcResult.Error);
+                        PState.SetEnd(ExcResult.Error, () => ErrorStep());
                         ErrorStep();
                         ZBRTTestNGRelease();
                         return;
@@ -526,19 +520,20 @@ namespace WpfApp_TitanStar_TestPlatform
         }
         private void ZBRTTestNGRelease()
         {
-            const short ng_value = 2;
             string mem_result = "ZBRT_Signal_Result".GetPLCMem();//M4400
-            SysLog.Add(LogLevel.Warning, $"{ZBRTTestState.Title}:設定NG復歸...");
-            Global.PLC.WriteOneData(mem_result, ng_value);
+            SysLog.Add(LogLevel.Warning, $"{ZBRTTestState.Title}:{SelectedResetOption}復歸...");
+            Global.PLC.WriteOneData(mem_result, PLCResetResult);
             if (CurrentProduct != null)
                 DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
-            ProcedureZBRTResetTest();
+            if (PLCResetResult != 0)
+                ProcedureZBRTResetTest();
             CurrentProduct = null;
         }
         #endregion
         #region ZBRT Burn Sequence
         public void ProcedureBurn_ZBRT()
         {
+            CurrentBurnState = ZBRTBurnState;
             ProcedureState PState = ZBRTBurnState;
             if (PState.IsBusy)
             {
@@ -695,6 +690,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 {
                     if (PState.IsCompleted)
                         return;
+                    DispMain?.Invoke(() => PState.CurrentInstruction = ins);
                     bool ex = "燒錄流程".TryCatch(() =>
                     {
                         if (PState.IsModeStep)
@@ -706,7 +702,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         }
                         if (PState.IsReseting || PState.IsStop)
                         {
-                            PState.SetEnd(ExcResult.Abort);
+                            PState.SetEnd(ExcResult.Abort, () => ErrorStep());
                             return;
                         }
                         int id = ins.ID ?? -1;
@@ -716,7 +712,7 @@ namespace WpfApp_TitanStar_TestPlatform
                         if (!PState.IsBypassErr && ins != null &&
                             ins.ExcResult != ExcResult.Success)
                         {
-                            PState.SetEnd(ins.ExcResult);
+                            PState.SetEnd(ins.ExcResult, () => ErrorStep());
                             ErrorStep();
                             ZBRTBurnNGRelease();
                             return;
@@ -725,7 +721,7 @@ namespace WpfApp_TitanStar_TestPlatform
 
                     if (!ex)
                     {
-                        PState.SetEnd(ExcResult.Error);
+                        PState.SetEnd(ExcResult.Error, () => ErrorStep());
                         ErrorStep();
                         ZBRTBurnNGRelease();
                         return;
@@ -777,13 +773,14 @@ namespace WpfApp_TitanStar_TestPlatform
         }
         private void ZBRTBurnNGRelease()
         {
-            const short ng_value = 2;
             string mem_burn_result = "ZBRT_Burn_Result".GetPLCMem();
-            SysLog.Add(LogLevel.Warning, $"{ZBRTBurnState.Title}:設定NG復歸...");
-            Global.PLC.WriteOneData(mem_burn_result, ng_value); 
+            SysLog.Add(LogLevel.Warning, $"{ZBRTBurnState.Title}:{SelectedResetOption}復歸...");
+
+            Global.PLC.WriteOneData(mem_burn_result, PLCResetResult); 
             if (CurrentProduct != null)
                 DispMain?.Invoke(() => CurrentProduct.TimeEnd = DateTime.Now);
-            ProcedureZBRTResetBurn();
+            if(PLCResetResult != 0)
+                ProcedureZBRTResetBurn();
             CurrentProduct = null;
         }
         #endregion

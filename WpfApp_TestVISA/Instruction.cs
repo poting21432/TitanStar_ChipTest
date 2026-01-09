@@ -37,7 +37,7 @@ namespace WpfApp_TitanStar_TestPlatform
         public string Title { get; set; } = Title;
         public object? Tag { get; set; }
         public Order? InsOrder { get; set; } = InsOrder;
-        public bool AbortSignal { get; private set; }
+        public bool AbortSignal { get; private set; } = false;
         public object?[] Parameters { get; set; } = Parameters;
         public ExcResult ExcResult { get; set; } = ExcResult.NotSupport;
         public object? Result { get; set; }
@@ -45,6 +45,17 @@ namespace WpfApp_TitanStar_TestPlatform
         public Action<Instruction>? OnStart { get; set; }
         public Action<Instruction>? OnEnd { get; set; }
 
+        public void Reset(string title="", int id = -1)
+        {
+            if (!string.IsNullOrEmpty(title))
+                Title = title;
+            if (id != -1)
+                ID = id;
+            ExcResult = ExcResult.NotSupport;
+            AbortSignal = false;
+            Result = null;
+        }
+        public void Abort() => AbortSignal = true;
         public ExcResult Execute()
         {
             OnStart?.Invoke(this);
@@ -146,7 +157,7 @@ namespace WpfApp_TitanStar_TestPlatform
                     {
                         count++;
                         if (IsLog)
-                            SysLog.Add(LogLevel.Info, $"{Mem}: v^ * {count}");
+                            SysLog.Add(LogLevel.Info, $"{Title}: 閃爍 * {count}");
                     }
                     last_value = result.ReturnValue;
                 }
@@ -271,8 +282,6 @@ namespace WpfApp_TitanStar_TestPlatform
             }
             if (Parameters.Length != 4)
                 throw new Exception($"{InstructionMessage}: 錯誤的參數格式");
-
-            float volt = 0.0f;
             ushort[] regs = [];
             SerialPort port = Global.ModbusPort;
             var master = ModbusSerialMaster.CreateRtu(port);
@@ -301,7 +310,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 if (regs.Length == 2)
                 {
                     ExcResult = ExcResult.Success;
-                    volt = ConvertFloatFromRegisters(regs);
+                    float volt = ConvertFloatFromRegisters(regs);
                     Result = volt;
                     if (volt < maxV && volt > minV)
                     {
@@ -317,7 +326,6 @@ namespace WpfApp_TitanStar_TestPlatform
                 else
                 {
                     ExcResult = ExcResult.Error;
-                    volt = float.NaN; 
                     Result = null;
                 }
             }
@@ -409,6 +417,7 @@ namespace WpfApp_TitanStar_TestPlatform
     [AddINotifyPropertyChangedInterface]
     public class ProcedureState(string Title)
     {
+        public Instruction? CurrentInstruction { get; set; }
         public ExcResult ExcResult { get; set; } = ExcResult.Null;
         public string Title { get; set; } = Title;
         public SolidColorBrush BrushState { get; set; } = Brushes.Transparent;
@@ -450,7 +459,7 @@ namespace WpfApp_TitanStar_TestPlatform
                 IsCompleted = false;
             });
         }
-        public void SetEnd(ExcResult excR)
+        public void SetEnd(ExcResult excR, Action? dispOnEnded = null)
         {
             ExcResult = excR;
             double t = (DateTime.Now - TStart)?.TotalSeconds ?? double.NaN;
@@ -479,6 +488,8 @@ namespace WpfApp_TitanStar_TestPlatform
                 SignalNext = false;
                 IsStop = false;
                 IsCompleted = true;
+                CurrentInstruction = null;
+                dispOnEnded?.Invoke();
             });
         }
     }
