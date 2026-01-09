@@ -177,12 +177,16 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 OnStart = (Ins) =>
                 {
+                    CreateInstructionTask("5V測試導通", ins_pho_check4);
                     NextStep(); //->"5V,mA 電表測試"
                     SysLog.Add(LogLevel.Info, $"導通5V {v5_pos}->1 {v5_neg}->1");
                     Global.PLC.WriteRandomData([v5_pos, v5_neg], [1, 1]);
                     DispMain?.Invoke(() => ZBRT_Supply = "5V");
                 },
                 OnEnd = (Ins) => {
+                    Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check4,
+                            () => CurrentProduct!.OnCheck = "V",
+                            () => CurrentProduct!.OnCheck = "X");
                     Thread.Sleep(500);
                 }
             });
@@ -191,16 +195,10 @@ namespace WpfApp_TitanStar_TestPlatform
                 OnStart = (Ins) =>
                 {
                     CreateInstructionTask("頻譜儀初始化", ins_initRF);
-                    CreateInstructionTask("3V測試導通", ins_pho_check4);
                     SysLog.Add(LogLevel.Info, $"導通3V {v3_pos}->1 {v3_neg}->1");
                     var r = Global.PLC.WriteRandomData([v3_pos, v3_neg], [1, 1]);
                     Ins.ExcResult = r.IsSuccess ? ExcResult.Success : ExcResult.Error;
                     DispMain?.Invoke(() => ZBRT_Supply = "3V");
-                },
-                OnEnd = (Ins) => {
-                    Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check4,
-                         () => CurrentProduct!.OnCheck = "V",
-                         () => CurrentProduct!.OnCheck = "X");
                 }
             });
             Instructions.Add(new(16, "登錄開關上升", Order.SendPLCSignal, [Global.PLC, mem_switch, (short)0])
@@ -240,13 +238,11 @@ namespace WpfApp_TitanStar_TestPlatform
             {
                 OnStart = (Ins) =>
                 {
-                    CreateInstructionTask("斷開5V", ins_pho_check1);
                     SysLog.Add(LogLevel.Info, $"斷開5V {v5_pos}->0 {v5_neg}->0");
                     var r = Global.PLC.WriteRandomData([v5_pos, v5_neg], [0, 0]);
                     Ins.ExcResult = r.IsSuccess ? ExcResult.Success : ExcResult.Error;
                     DispMain?.Invoke(() => ZBRT_Supply = "3V");
-                },
-                OnEnd = (Ins) => Ins.ExcResult = WaitPhoCheck(Ins, ins_pho_check1)
+                }
             });
 
             Instructions.Add(new(44, "2.4V導通", Order.SendPLCSignal, [Global.PLC, v_low, (short)1])
